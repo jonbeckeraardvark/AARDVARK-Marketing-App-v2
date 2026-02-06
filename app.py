@@ -819,6 +819,89 @@ async def create_newsletter(
             "warning": "Saved to file (database unavailable)"
         })
 
+@app.post("/newsletters/create")
+async def create_newsletter_form(request: Request):
+    """Handle newsletter creation from form and redirect to editor"""
+    if not check_auth(request):
+        return RedirectResponse(url="/login", status_code=303)
+    
+    form = await request.form()
+    brand_id = int(form.get("brand_id"))
+    title = form.get("title")
+    month = form.get("month")
+    year = int(form.get("year"))
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        # Create newsletter
+        cursor.execute("""
+            INSERT INTO newsletters (brand_id, title, month, year)
+            VALUES (?, ?, ?, ?)
+        """, (brand_id, title, month, year))
+        
+        newsletter_id = cursor.lastrowid
+        
+        # Create default sections for the newsletter
+        for i, section in enumerate(SECTION_TYPES):
+            default_content = get_default_section_content(section['type'])
+            cursor.execute("""
+                INSERT INTO sections (newsletter_id, section_type, section_order, enabled, content)
+                VALUES (?, ?, ?, ?, ?)
+            """, (newsletter_id, section['type'], i, 1 if section['required'] else 0, json.dumps(default_content)))
+        
+        conn.commit()
+        conn.close()
+        
+        # Redirect to editor
+        return RedirectResponse(url=f"/newsletter/{newsletter_id}", status_code=303)
+        
+    except Exception as e:
+        print(f"Error creating newsletter: {e}")
+        return RedirectResponse(url="/?error=creation_failed", status_code=303)
+
+@app.post("/eblasts/create")
+async def create_eblast_form(request: Request):
+    """Handle eblast creation from form and redirect to editor"""
+    if not check_auth(request):
+        return RedirectResponse(url="/login", status_code=303)
+    
+    form = await request.form()
+    brand_id = int(form.get("brand_id"))
+    title = form.get("title")
+    subject_line = form.get("subject_line", "")
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        # Create eblast
+        cursor.execute("""
+            INSERT INTO eblasts (brand_id, title, subject_line)
+            VALUES (?, ?, ?)
+        """, (brand_id, title, subject_line))
+        
+        eblast_id = cursor.lastrowid
+        
+        # Create default sections for the eblast
+        for i, section in enumerate(EBLAST_SECTION_TYPES):
+            default_content = get_default_eblast_section_content(section['type'])
+            cursor.execute("""
+                INSERT INTO eblast_sections (eblast_id, section_type, section_order, enabled, content)
+                VALUES (?, ?, ?, ?, ?)
+            """, (eblast_id, section['type'], i, 1 if section['required'] else 0, json.dumps(default_content)))
+        
+        conn.commit()
+        conn.close()
+        
+        # Redirect to editor
+        return RedirectResponse(url=f"/eblast/{eblast_id}", status_code=303)
+        
+    except Exception as e:
+        print(f"Error creating eblast: {e}")
+        return RedirectResponse(url="/?error=creation_failed", status_code=303)
+
 @app.put("/api/sections/{section_id}")
 async def update_section(section_id: int, request: Request, user: dict = Depends(get_current_user)):
     """Update a section's content"""
