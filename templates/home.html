@@ -3,172 +3,408 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Newsletter Generator</title>
+    <title>Newsletter Generator 1.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'p7-green': '#565C43',
+                        'p7-lime': '#C0D330',
+                        'aard-navy': '#1a365d',
+                        'aard-blue': '#3182ce'
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <div class="max-w-6xl mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <div class="flex justify-between items-center">
-                    <h1 class="text-2xl font-bold text-gray-900">Newsletter Generator</h1>
-                    <div class="flex space-x-4">
-                        <form action="/logout" method="post" class="inline">
-                            <button type="submit" class="text-red-600 hover:text-red-700 font-medium">Logout</button>
-                        </form>
-                    </div>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="bg-gray-800 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold">Marketing Generator</h1>
+                    <p class="text-gray-400 text-sm">Aardvark Tactical & Project 7 Armor</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button onclick="openCreateModal()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-medium transition">
+                        + New Newsletter
+                    </button>
+                    <button onclick="openEblastModal()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium transition">
+                        + New Eblast
+                    </button>
+                    <a href="/logout" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg font-medium transition text-white">
+                        Logout
+                    </a>
                 </div>
             </div>
         </div>
+    </header>
 
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Brand Filter Tabs -->
+        <div class="flex space-x-4 mb-6">
+            <button onclick="filterBrand('all')" id="filter-all" class="px-4 py-2 rounded-lg font-medium bg-gray-800 text-white">
+                All Newsletters
+            </button>
+            <button onclick="filterBrand('project7')" id="filter-project7" class="px-4 py-2 rounded-lg font-medium bg-gray-200 text-gray-700 hover:bg-gray-300">
+                PROJECT7
+            </button>
+            <button onclick="filterBrand('aardvark')" id="filter-aardvark" class="px-4 py-2 rounded-lg font-medium bg-gray-200 text-gray-700 hover:bg-gray-300">
+                AARDVARK
+            </button>
+        </div>
+
+        <!-- Database Error Warning -->
         {% if db_error %}
-        <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <h3 class="text-red-800 font-medium mb-2">Database Error</h3>
-            <p class="text-red-700 text-sm">{{ db_error }}</p>
+        <div class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <p class="text-yellow-800 text-sm">
+                <strong>Warning:</strong> Database connection failed: {{ db_error }}
+            </p>
+            <p class="text-yellow-700 text-sm mt-2">
+                The app is running in fallback mode. You can still create and edit newsletters, but they will be saved to files instead of the database.
+            </p>
         </div>
         {% endif %}
-
-        <!-- Create Buttons -->
-        <div class="grid md:grid-cols-2 gap-6 mb-8">
-            <!-- Create Newsletter -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h2 class="text-xl font-semibold text-gray-900 mb-4">Create Newsletter</h2>
-                <form action="/newsletters/create" method="post" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
-                        <select name="brand_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
-                            {% for brand in brands %}
-                            <option value="{{ brand.id }}">{{ brand.display_name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Title</label>
-                        <input type="text" name="title" required class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Monthly Update">
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Month</label>
-                            <select name="month" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
-                                <option value="January">January</option>
-                                <option value="February">February</option>
-                                <option value="March">March</option>
-                                <option value="April">April</option>
-                                <option value="May">May</option>
-                                <option value="June">June</option>
-                                <option value="July">July</option>
-                                <option value="August">August</option>
-                                <option value="September">September</option>
-                                <option value="October">October</option>
-                                <option value="November">November</option>
-                                <option value="December">December</option>
-                            </select>
+        
+        <!-- Newsletter Grid -->
+        <h2 class="text-xl font-bold text-gray-700 mb-4">📰 Newsletters</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="newsletter-grid">
+            {% if newsletters %}
+                {% for nl in newsletters %}
+                <div class="newsletter-card bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition" data-brand="{{ nl.brand_slug }}">
+                    <!-- Brand Color Bar -->
+                    <div class="h-2 {% if nl.brand_slug == 'project7' %}bg-p7-green{% else %}bg-aard-navy{% endif %}"></div>
+                    
+                    <div class="p-6">
+                        <div class="flex items-start justify-between mb-4">
+                            <div>
+                                <span class="text-xs font-medium px-2 py-1 rounded {% if nl.brand_slug == 'project7' %}bg-p7-lime text-p7-green{% else %}bg-blue-100 text-aard-navy{% endif %}">
+                                    {{ nl.brand_name }}
+                                </span>
+                                <h3 class="text-lg font-bold text-gray-800 mt-2">{{ nl.title }}</h3>
+                                <p class="text-gray-500">{{ nl.month }} {{ nl.year }}</p>
+                            </div>
+                            <span class="text-xs px-2 py-1 rounded-full {% if nl.status == 'published' %}bg-green-100 text-green-700{% elif nl.status == 'ready' %}bg-yellow-100 text-yellow-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                                {{ nl.status }}
+                            </span>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Year</label>
-                            <input type="number" name="year" required class="w-full border border-gray-300 rounded-lg px-3 py-2" value="2025" min="2024" max="2030">
+                        
+                        <div class="text-xs text-gray-400 mb-4">
+                            Last updated: {{ nl.updated_at }}
+                        </div>
+                        
+                        <div class="flex space-x-2">
+                            <a href="/newsletter/{{ nl.id }}" class="flex-1 text-center bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded font-medium text-sm transition">
+                                Edit
+                            </a>
+                            <a href="/preview/{{ nl.id }}?version=email" target="_blank" class="flex-1 text-center bg-blue-50 hover:bg-blue-100 text-blue-700 py-2 px-3 rounded font-medium text-sm transition">
+                                Preview
+                            </a>
+                            <button onclick="deleteNewsletter({{ nl.id }}, '{{ nl.title }}')" class="bg-red-50 hover:bg-red-100 text-red-600 py-2 px-3 rounded text-sm transition">
+                                🗑️
+                            </button>
                         </div>
                     </div>
-                    <button type="submit" class="w-full bg-blue-600 text-white rounded-lg px-4 py-3 font-medium hover:bg-blue-700">Create Newsletter</button>
-                </form>
-            </div>
-
-            <!-- Create Eblast -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h2 class="text-xl font-semibold text-gray-900 mb-4">Create Eblast</h2>
-                <form action="/eblasts/create" method="post" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
-                        <select name="brand_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
-                            {% for brand in brands %}
-                            <option value="{{ brand.id }}">{{ brand.display_name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Title</label>
-                        <input type="text" name="title" required class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Holiday Sale">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Subject Line</label>
-                        <input type="text" name="subject_line" class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Don't Miss Our Holiday Sale!">
-                    </div>
-                    <button type="submit" class="w-full bg-green-600 text-white rounded-lg px-4 py-3 font-medium hover:bg-green-700">Create Eblast</button>
-                </form>
-            </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="col-span-full text-center py-12">
+                    <div class="text-gray-400 text-6xl mb-4">📰</div>
+                    <h3 class="text-xl font-medium text-gray-600 mb-2">No newsletters yet</h3>
+                    <p class="text-gray-500 mb-4">Create your first newsletter to get started</p>
+                    <button onclick="openCreateModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition">
+                        Create Newsletter
+                    </button>
+                </div>
+            {% endif %}
         </div>
 
-        <!-- Existing Items -->
-        <div class="grid lg:grid-cols-2 gap-6">
-            <!-- Newsletters -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <h2 class="text-lg font-semibold text-gray-900">Recent Newsletters</h2>
-                </div>
-                <div class="divide-y divide-gray-200">
-                    {% for newsletter in newsletters %}
-                    <div class="p-4 hover:bg-gray-50">
-                        <div class="flex items-center justify-between">
+        <!-- Eblasts Section -->
+        <h2 class="text-xl font-bold text-gray-700 mb-4 mt-10">⚡ Eblasts</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="eblast-grid">
+            {% if eblasts %}
+                {% for eb in eblasts %}
+                <div class="eblast-card bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition" data-brand="{{ eb.brand_slug }}">
+                    <!-- Brand Color Bar with gradient effect for eblasts -->
+                    <div class="h-2 {% if eb.brand_slug == 'project7' %}bg-gradient-to-r from-p7-green to-p7-lime{% else %}bg-gradient-to-r from-aard-navy to-aard-blue{% endif %}"></div>
+                    
+                    <div class="p-6">
+                        <div class="flex items-start justify-between mb-4">
                             <div>
-                                <h3 class="font-medium text-gray-900">{{ newsletter.title }}</h3>
-                                <p class="text-sm text-gray-600">{{ newsletter.brand_name }} • {{ newsletter.month }} {{ newsletter.year }}</p>
-                            </div>
-                            <div class="flex space-x-2">
-                                <a href="/newsletter/{{ newsletter.id }}" class="text-blue-600 hover:text-blue-700 text-sm font-medium">Edit</a>
-                                <a href="/preview/{{ newsletter.id }}" class="text-green-600 hover:text-green-700 text-sm font-medium">Preview</a>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                    {% if not newsletters %}
-                    <div class="p-4 text-center text-gray-500">
-                        <p>No newsletters yet. Create your first one!</p>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Eblasts -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <h2 class="text-lg font-semibold text-gray-900">Recent Eblasts</h2>
-                </div>
-                <div class="divide-y divide-gray-200">
-                    {% for eblast in eblasts %}
-                    <div class="p-4 hover:bg-gray-50">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h3 class="font-medium text-gray-900">{{ eblast.title }}</h3>
-                                <p class="text-sm text-gray-600">{{ eblast.brand_name }}</p>
-                                {% if eblast.subject_line %}
-                                <p class="text-xs text-gray-500">{{ eblast.subject_line }}</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-medium px-2 py-1 rounded {% if eb.brand_slug == 'project7' %}bg-p7-lime text-p7-green{% else %}bg-blue-100 text-aard-navy{% endif %}">
+                                        {{ eb.brand_name }}
+                                    </span>
+                                    <span class="text-xs font-medium px-2 py-1 rounded bg-purple-100 text-purple-700">
+                                        Eblast
+                                    </span>
+                                </div>
+                                <h3 class="text-lg font-bold text-gray-800 mt-2">{{ eb.title }}</h3>
+                                {% if eb.subject_line %}
+                                <p class="text-gray-500 text-sm italic">{{ eb.subject_line }}</p>
                                 {% endif %}
                             </div>
-                            <div class="flex space-x-2">
-                                <a href="/eblast/{{ eblast.id }}" class="text-blue-600 hover:text-blue-700 text-sm font-medium">Edit</a>
-                                <a href="/eblast/{{ eblast.id }}/preview" class="text-green-600 hover:text-green-700 text-sm font-medium">Preview</a>
-                            </div>
+                            <span class="text-xs px-2 py-1 rounded-full {% if eb.status == 'published' %}bg-green-100 text-green-700{% elif eb.status == 'ready' %}bg-yellow-100 text-yellow-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                                {{ eb.status }}
+                            </span>
+                        </div>
+                        
+                        <div class="text-xs text-gray-400 mb-4">
+                            Last updated: {{ eb.updated_at }}
+                        </div>
+                        
+                        <div class="flex space-x-2">
+                            <a href="/eblast/{{ eb.id }}" class="flex-1 text-center bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded font-medium text-sm transition">
+                                Edit
+                            </a>
+                            <a href="/preview/eblast/{{ eb.id }}" target="_blank" class="flex-1 text-center bg-green-50 hover:bg-green-100 text-green-700 py-2 px-3 rounded font-medium text-sm transition">
+                                Preview
+                            </a>
+                            <button onclick="deleteEblast({{ eb.id }}, '{{ eb.title }}')" class="bg-red-50 hover:bg-red-100 text-red-600 py-2 px-3 rounded text-sm transition">
+                                🗑️
+                            </button>
                         </div>
                     </div>
-                    {% endfor %}
-                    {% if not eblasts %}
-                    <div class="p-4 text-center text-gray-500">
-                        <p>No eblasts yet. Create your first one!</p>
-                    </div>
-                    {% endif %}
                 </div>
-            </div>
+                {% endfor %}
+            {% else %}
+                <div class="col-span-full text-center py-12">
+                    <div class="text-gray-400 text-6xl mb-4">⚡</div>
+                    <h3 class="text-xl font-medium text-gray-600 mb-2">No eblasts yet</h3>
+                    <p class="text-gray-500 mb-4">Create your first promotional eblast to get started</p>
+                    <button onclick="openEblastModal()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition">
+                        Create Eblast
+                    </button>
+                </div>
+            {% endif %}
         </div>
+    </main>
 
-        <!-- Debug Links -->
-        <div class="mt-8 text-center">
-            <div class="space-x-4 text-sm text-gray-500">
-                <a href="/health" class="hover:text-gray-700">Health Check</a>
-                <a href="/debug/db" class="hover:text-gray-700">Database Status</a>
-                <a href="/debug/backup" class="hover:text-gray-700">Backup Database</a>
-            </div>
+    <!-- Create Newsletter Modal -->
+    <div id="create-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+            <h2 class="text-xl font-bold mb-6">Create New Newsletter</h2>
+            
+            <form id="create-form" action="/newsletters/create" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                    <select name="brand_id" required class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        {% for brand in brands %}
+                        <option value="{{ brand.id }}">{{ brand.display_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                    <input type="text" name="title" required class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Monthly Update">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Month</label>
+                        <select name="month" required class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            <option value="January">January</option>
+                            <option value="February" selected>February</option>
+                            <option value="March">March</option>
+                            <option value="April">April</option>
+                            <option value="May">May</option>
+                            <option value="June">June</option>
+                            <option value="July">July</option>
+                            <option value="August">August</option>
+                            <option value="September">September</option>
+                            <option value="October">October</option>
+                            <option value="November">November</option>
+                            <option value="December">December</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Year</label>
+                        <input type="number" name="year" required class="w-full border border-gray-300 rounded-md px-3 py-2" value="2026" min="2024" max="2030">
+                    </div>
+                </div>
+                
+                <div class="flex space-x-4 pt-4">
+                    <button type="button" onclick="closeCreateModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition">
+                        Cancel
+                    </button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+                        Create Newsletter
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
+
+    <!-- Create Eblast Modal -->
+    <div id="eblast-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+            <h2 class="text-xl font-bold mb-6">Create New Eblast</h2>
+            
+            <form id="eblast-form" action="/eblasts/create" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                    <select name="brand_id" required class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        {% for brand in brands %}
+                        <option value="{{ brand.id }}">{{ brand.display_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                    <input type="text" name="title" required class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Holiday Sale">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Subject Line</label>
+                    <input type="text" name="subject_line" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Don't Miss Our Holiday Sale!">
+                </div>
+                
+                <div class="flex space-x-4 pt-4">
+                    <button type="button" onclick="closeEblastModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition">
+                        Cancel
+                    </button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition">
+                        Create Eblast
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Modal functions
+        function openCreateModal() {
+            document.getElementById('create-modal').classList.remove('hidden');
+            document.getElementById('create-modal').classList.add('flex');
+        }
+        
+        function closeCreateModal() {
+            document.getElementById('create-modal').classList.add('hidden');
+            document.getElementById('create-modal').classList.remove('flex');
+        }
+        
+        // Eblast Modal functions
+        function openEblastModal() {
+            document.getElementById('eblast-modal').classList.remove('hidden');
+            document.getElementById('eblast-modal').classList.add('flex');
+        }
+        
+        function closeEblastModal() {
+            document.getElementById('eblast-modal').classList.add('hidden');
+            document.getElementById('eblast-modal').classList.remove('flex');
+        }
+        
+        // Delete newsletter
+        async function deleteNewsletter(id, title) {
+            if (!confirm(`Are you sure you want to delete "${title}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/newsletters/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    location.reload();
+                } else {
+                    alert('Error deleting newsletter');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error deleting newsletter');
+            }
+        }
+        
+        // Delete eblast
+        async function deleteEblast(id, title) {
+            if (!confirm(`Are you sure you want to delete "${title}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/eblasts/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    location.reload();
+                } else {
+                    alert('Error deleting eblast');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error deleting eblast');
+            }
+        }
+        
+        // Brand filter - applies to both newsletters and eblasts
+        function filterBrand(brand) {
+            const newsletterCards = document.querySelectorAll('.newsletter-card');
+            const eblastCards = document.querySelectorAll('.eblast-card');
+            const buttons = document.querySelectorAll('[id^="filter-"]');
+            
+            // Update button styles
+            buttons.forEach(btn => {
+                if (btn.id === `filter-${brand}`) {
+                    btn.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+                    btn.classList.add('bg-gray-800', 'text-white');
+                } else {
+                    btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+                    btn.classList.remove('bg-gray-800', 'text-white');
+                }
+            });
+            
+            // Filter newsletter cards
+            newsletterCards.forEach(card => {
+                if (brand === 'all' || card.dataset.brand === brand) {
+                    card.classList.remove('hidden');
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+            
+            // Filter eblast cards
+            eblastCards.forEach(card => {
+                if (brand === 'all' || card.dataset.brand === brand) {
+                    card.classList.remove('hidden');
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+        }
+        
+        // Close modals on outside click
+        document.getElementById('create-modal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                closeCreateModal();
+            }
+        });
+        
+        document.getElementById('eblast-modal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                closeEblastModal();
+            }
+        });
+        
+        // Close modals on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeCreateModal();
+                closeEblastModal();
+            }
+        });
+    </script>
 </body>
 </html>
