@@ -6,3 +6,4 @@ python-dotenv==1.0.0
 httpx==0.25.2
 beautifulsoup4==4.12.2
 starlette==0.27.0
+itsdangerous==2.1.2
