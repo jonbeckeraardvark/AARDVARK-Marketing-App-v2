@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: newsletter-generator
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: APP_PASSWORD
+        value: "your-secure-password-here"
+      - key: SESSION_SECRET_KEY
+        generateValue: true
+      - key: DB_PATH
+        value: "/var/data/newsletters.db"
+    disk:
+      name: newsletter-data
+      mountPath: /var/data
+      sizeGB: 1

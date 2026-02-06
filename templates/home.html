@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Newsletter Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex justify-between items-center">
+                    <h1 class="text-2xl font-bold text-gray-900">Newsletter Generator</h1>
+                    <div class="flex space-x-4">
+                        <form action="/logout" method="post" class="inline">
+                            <button type="submit" class="text-red-600 hover:text-red-700 font-medium">Logout</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if db_error %}
+        <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <h3 class="text-red-800 font-medium mb-2">Database Error</h3>
+            <p class="text-red-700 text-sm">{{ db_error }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Create Buttons -->
+        <div class="grid md:grid-cols-2 gap-6 mb-8">
+            <!-- Create Newsletter -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Create Newsletter</h2>
+                <form action="/api/newsletters" method="post" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                        <select name="brand_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                            {% for brand in brands %}
+                            <option value="{{ brand.id }}">{{ brand.display_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                        <input type="text" name="title" required class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Monthly Update">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Month</label>
+                            <select name="month" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                                <option value="January">January</option>
+                                <option value="February">February</option>
+                                <option value="March">March</option>
+                                <option value="April">April</option>
+                                <option value="May">May</option>
+                                <option value="June">June</option>
+                                <option value="July">July</option>
+                                <option value="August">August</option>
+                                <option value="September">September</option>
+                                <option value="October">October</option>
+                                <option value="November">November</option>
+                                <option value="December">December</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Year</label>
+                            <input type="number" name="year" required class="w-full border border-gray-300 rounded-lg px-3 py-2" value="2025" min="2024" max="2030">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 text-white rounded-lg px-4 py-3 font-medium hover:bg-blue-700">Create Newsletter</button>
+                </form>
+            </div>
+
+            <!-- Create Eblast -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Create Eblast</h2>
+                <form action="/api/eblasts" method="post" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                        <select name="brand_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                            {% for brand in brands %}
+                            <option value="{{ brand.id }}">{{ brand.display_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                        <input type="text" name="title" required class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Holiday Sale">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Subject Line</label>
+                        <input type="text" name="subject_line" class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Don't Miss Our Holiday Sale!">
+                    </div>
+                    <button type="submit" class="w-full bg-green-600 text-white rounded-lg px-4 py-3 font-medium hover:bg-green-700">Create Eblast</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Existing Items -->
+        <div class="grid lg:grid-cols-2 gap-6">
+            <!-- Newsletters -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-semibold text-gray-900">Recent Newsletters</h2>
+                </div>
+                <div class="divide-y divide-gray-200">
+                    {% for newsletter in newsletters %}
+                    <div class="p-4 hover:bg-gray-50">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="font-medium text-gray-900">{{ newsletter.title }}</h3>
+                                <p class="text-sm text-gray-600">{{ newsletter.brand_name }} • {{ newsletter.month }} {{ newsletter.year }}</p>
+                            </div>
+                            <div class="flex space-x-2">
+                                <a href="/newsletter/{{ newsletter.id }}" class="text-blue-600 hover:text-blue-700 text-sm font-medium">Edit</a>
+                                <a href="/preview/{{ newsletter.id }}" class="text-green-600 hover:text-green-700 text-sm font-medium">Preview</a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% if not newsletters %}
+                    <div class="p-4 text-center text-gray-500">
+                        <p>No newsletters yet. Create your first one!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Eblasts -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-semibold text-gray-900">Recent Eblasts</h2>
+                </div>
+                <div class="divide-y divide-gray-200">
+                    {% for eblast in eblasts %}
+                    <div class="p-4 hover:bg-gray-50">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="font-medium text-gray-900">{{ eblast.title }}</h3>
+                                <p class="text-sm text-gray-600">{{ eblast.brand_name }}</p>
+                                {% if eblast.subject_line %}
+                                <p class="text-xs text-gray-500">{{ eblast.subject_line }}</p>
+                                {% endif %}
+                            </div>
+                            <div class="flex space-x-2">
+                                <a href="/eblast/{{ eblast.id }}" class="text-blue-600 hover:text-blue-700 text-sm font-medium">Edit</a>
+                                <a href="/eblast/{{ eblast.id }}/preview" class="text-green-600 hover:text-green-700 text-sm font-medium">Preview</a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% if not eblasts %}
+                    <div class="p-4 text-center text-gray-500">
+                        <p>No eblasts yet. Create your first one!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug Links -->
+        <div class="mt-8 text-center">
+            <div class="space-x-4 text-sm text-gray-500">
+                <a href="/health" class="hover:text-gray-700">Health Check</a>
+                <a href="/debug/db" class="hover:text-gray-700">Database Status</a>
+                <a href="/debug/backup" class="hover:text-gray-700">Backup Database</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

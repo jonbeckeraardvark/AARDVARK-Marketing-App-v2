@@ -1,0 +1,1844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit: {{ newsletter.title }} | Newsletter Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'brand-primary': '{{ brand_config.colors.primary }}',
+                        'brand-accent': '{{ brand_config.colors.accent }}',
+                        'brand-secondary': '{{ brand_config.colors.secondary_bg }}'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .tab-active {
+            border-bottom: 3px solid {{ brand_config.colors.accent }};
+            color: {{ brand_config.colors.primary }};
+        }
+        .section-enabled {
+            border-left: 4px solid {{ brand_config.colors.accent }};
+        }
+        .section-disabled {
+            border-left: 4px solid #e5e7eb;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="text-gray-500 hover:text-gray-700">
+                        ← Back
+                    </a>
+                    <div class="h-6 w-px bg-gray-300"></div>
+                    <div>
+                        <h1 class="text-lg font-bold text-gray-800">{{ newsletter.title }}</h1>
+                        <p class="text-sm text-gray-500">{{ newsletter.brand_name }} • {{ newsletter.month }} {{ newsletter.year }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <a href="/preview/{{ newsletter.id }}?version=email" target="_blank" 
+                       class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+                        Preview Email
+                    </a>
+                    <a href="/preview/{{ newsletter.id }}?version=website" target="_blank"
+                       class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+                        Preview Website
+                    </a>
+                    <button onclick="exportNewsletter()" 
+                            class="text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+                            style="background-color: {{ brand_config.colors.primary }}">
+                        Export HTML
+                    </button>
+                    <a href="/logout" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-6">
+        <div class="flex gap-6">
+            <!-- Left Sidebar - Section Tabs -->
+            <div class="w-64 flex-shrink-0">
+                <div class="bg-white rounded-lg shadow-sm overflow-hidden sticky top-20">
+                    <div class="p-4 border-b" style="background-color: {{ brand_config.colors.primary }}10">
+                        <h2 class="font-bold text-gray-800">Sections</h2>
+                        <p class="text-xs text-gray-500">Click to edit, toggle to enable/disable</p>
+                    </div>
+                    <div class="divide-y" id="section-tabs">
+                        {% for section in sections %}
+                        <div class="section-tab flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 transition {% if loop.first %}bg-gray-50{% endif %} {% if section.enabled %}section-enabled{% else %}section-disabled{% endif %}"
+                             data-section-id="{{ section.id }}"
+                             data-section-type="{{ section.section_type }}"
+                             onclick="selectSection({{ section.id }})">
+                            <div class="flex-1">
+                                <span class="font-medium text-sm text-gray-800">
+                                    {% for st in section_types %}
+                                        {% if st.type == section.section_type %}{{ st.name }}{% endif %}
+                                    {% endfor %}
+                                </span>
+                                {% if section.enabled %}
+                                <span class="text-xs text-green-600 ml-2">●</span>
+                                {% else %}
+                                <span class="text-xs text-gray-400 ml-2">○</span>
+                                {% endif %}
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                                <input type="checkbox" {% if section.enabled %}checked{% endif %} 
+                                       onchange="toggleSection({{ section.id }}, this.checked)"
+                                       class="sr-only peer"
+                                       {% for st in section_types %}{% if st.type == section.section_type and st.required %}disabled{% endif %}{% endfor %}>
+                                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Editor Area -->
+            <div class="flex-1">
+                <div class="bg-white rounded-lg shadow-sm">
+                    <!-- Section Editor Header -->
+                    <div class="p-4 border-b flex items-center justify-between">
+                        <div>
+                            <h3 class="font-bold text-lg text-gray-800" id="section-title">Select a section</h3>
+                            <p class="text-sm text-gray-500" id="section-description">Click a section on the left to edit</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="openAIModal()" class="bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1.5 rounded text-sm font-medium transition">
+                                🤖 AI Assist
+                            </button>
+                            <button onclick="saveCurrentSection()" class="bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1.5 rounded text-sm font-medium transition">
+                                💾 Save
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Dynamic Section Content -->
+                    <div id="section-editor" class="p-6">
+                        <div class="text-center py-12 text-gray-400">
+                            <div class="text-4xl mb-2">📝</div>
+                            <p>Select a section from the left panel to start editing</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Image Upload Section -->
+                <div class="bg-white rounded-lg shadow-sm mt-6 p-6">
+                    <h3 class="font-bold text-gray-800 mb-4">Images</h3>
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition">
+                        <input type="file" id="image-upload" accept="image/*" class="hidden" onchange="uploadImage(this)">
+                        <label for="image-upload" class="cursor-pointer">
+                            <div class="text-gray-400 text-3xl mb-2">📷</div>
+                            <p class="text-gray-600">Click to upload or drag and drop</p>
+                            <p class="text-xs text-gray-400 mt-1">PNG, JPG up to 2MB</p>
+                        </label>
+                    </div>
+                    
+                    <!-- Uploaded Images Grid -->
+                    <div class="grid grid-cols-4 gap-4 mt-4" id="images-grid">
+                        {% for image in images %}
+                        <div class="relative group">
+                            <img src="/uploads/{{ image.filename }}" alt="{{ image.original_filename }}" 
+                                 class="w-full h-24 object-cover rounded cursor-pointer hover:ring-2 hover:ring-blue-500"
+                                 onclick="copyImageUrl('/uploads/{{ image.filename }}')">
+                            <div class="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition rounded flex items-center justify-center">
+                                <span class="text-white text-xs">Click to copy URL</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- AI Assist Modal -->
+    <div id="ai-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 overflow-y-auto">
+        <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 my-8">
+            <div class="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+                <h2 class="text-lg font-bold text-gray-800">🤖 AI Content Assistant</h2>
+                <button onclick="closeAIModal()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+            
+            <div class="p-6">
+                <!-- Step 1: Input -->
+                <div id="ai-step-input">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">What would you like to do?</label>
+                        <select id="ai-mode" class="w-full border rounded-lg px-3 py-2" onchange="updateAIMode()">
+                            <option value="from_url">Generate content from product URL</option>
+                            <option value="bullets_to_copy">Convert bullet points to full copy</option>
+                            <option value="polish_draft">Polish/improve existing draft</option>
+                            <option value="expand_topic">Expand a topic into full section</option>
+                        </select>
+                    </div>
+                    
+                    <div id="ai-url-input" class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Product URL</label>
+                        <input type="url" id="ai-url" class="w-full border rounded-lg px-3 py-2" 
+                               placeholder="https://www.project7armor.com/shop/...">
+                        <p class="text-xs text-gray-500 mt-1">Paste a product page URL to scrape content and images</p>
+                    </div>
+                    
+                    <div id="ai-supplemental-url" class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Additional Reference URL <span class="text-gray-400 font-normal">(optional)</span>
+                        </label>
+                        <input type="url" id="ai-url-supplemental" class="w-full border rounded-lg px-3 py-2" 
+                               placeholder="https://manufacturer-site.com/specs... or review article URL">
+                        <p class="text-xs text-gray-500 mt-1">Manufacturer specs, reviews, or technical docs to inform the writing</p>
+                    </div>
+                    
+                    <div id="ai-input-area" class="mb-4 hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Input</label>
+                        <textarea id="ai-input" rows="6" class="w-full border rounded-lg px-3 py-2" 
+                                  placeholder="Enter your bullet points, draft text, or topic..."></textarea>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Guidance <span class="text-gray-400 font-normal">(optional)</span>
+                        </label>
+                        <textarea id="ai-guidance" rows="2" class="w-full border rounded-lg px-3 py-2" 
+                                  placeholder="e.g., Focus on lightweight design for patrol officers, emphasize the quick-release mechanism, highlight K9 handler benefits..."></textarea>
+                        <p class="text-xs text-gray-500 mt-1">Tell the AI what to emphasize, who the audience is, or specific angles to take</p>
+                    </div>
+                    
+                    <button onclick="generateAIContent()" id="ai-generate-btn" class="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg font-medium transition">
+                        Generate Content
+                    </button>
+                    
+                    <div id="ai-loading" class="hidden text-center py-8">
+                        <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-purple-500 border-t-transparent"></div>
+                        <p class="text-gray-600 mt-2">Scraping page and generating content...</p>
+                    </div>
+                    
+                    <div id="ai-error" class="mt-4 hidden p-4 bg-red-50 rounded-lg">
+                        <p class="text-red-700" id="ai-error-message"></p>
+                    </div>
+                </div>
+                
+                <!-- Step 2: Review & Edit Generated Content -->
+                <div id="ai-step-review" class="hidden">
+                    <div class="mb-4 p-3 bg-purple-50 rounded-lg flex items-center justify-between">
+                        <span class="text-purple-800 font-medium">✓ Content Generated for <span id="ai-section-type-label"></span></span>
+                        <button onclick="resetAIModal()" class="text-purple-600 hover:text-purple-800 text-sm">← Generate New</button>
+                    </div>
+                    
+                    <!-- Image Selection - Multi-select -->
+                    <div id="ai-images-section" class="mb-6 hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">📷 Select Images <span class="text-gray-400 font-normal">(click to select, click again to deselect)</span></label>
+                        <div id="ai-images-grid" class="grid grid-cols-5 gap-2">
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2">Selected: <span id="ai-selected-count">0</span> image(s)</p>
+                    </div>
+                    
+                    <!-- Dynamic Section Fields - populated by JS based on section type -->
+                    <div id="ai-dynamic-fields" class="space-y-4">
+                        <!-- Fields inserted here by JavaScript -->
+                    </div>
+                    
+                    <!-- Raw text fallback -->
+                    <div id="ai-raw-text" class="hidden mt-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Generated Content (Raw)</label>
+                        <textarea id="ai-field-raw" rows="10" class="w-full border rounded-lg px-3 py-2 font-mono text-sm"></textarea>
+                        <p class="text-xs text-gray-500 mt-1">Content couldn't be parsed into fields. Copy and paste manually.</p>
+                    </div>
+                    
+                    <!-- Apply Button -->
+                    <div class="mt-6 flex space-x-3">
+                        <button onclick="applyAIContent()" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-medium transition text-lg">
+                            ✓ Apply to Section
+                        </button>
+                        <button onclick="regenerateAI()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-6 rounded-lg font-medium transition">
+                            🔄 Regenerate
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="export-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="p-4 border-b">
+                <h2 class="text-lg font-bold text-gray-800">Export Newsletter</h2>
+            </div>
+            
+            <div class="p-6">
+                <div class="space-y-3">
+                    <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                        <input type="radio" name="export-version" value="email" checked class="mr-3">
+                        <div>
+                            <span class="font-medium">Email Version</span>
+                            <p class="text-sm text-gray-500">Truncated content with "Read more" links</p>
+                        </div>
+                    </label>
+                    <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                        <input type="radio" name="export-version" value="website" class="mr-3">
+                        <div>
+                            <span class="font-medium">Website Version</span>
+                            <p class="text-sm text-gray-500">Full content for Odoo/website</p>
+                        </div>
+                    </label>
+                    <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                        <input type="radio" name="export-version" value="both" class="mr-3">
+                        <div>
+                            <span class="font-medium">Both Versions</span>
+                            <p class="text-sm text-gray-500">Generate email and website HTML files</p>
+                        </div>
+                    </label>
+                </div>
+                
+                <div class="flex space-x-3 mt-6">
+                    <button onclick="closeExportModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg font-medium transition">
+                        Cancel
+                    </button>
+                    <button onclick="doExport()" class="flex-1 text-white py-2 rounded-lg font-medium transition" style="background-color: {{ brand_config.colors.primary }}">
+                        Export
+                    </button>
+                </div>
+                
+                <div id="export-result" class="mt-4 hidden p-4 bg-green-50 rounded-lg">
+                    <p class="text-green-700 font-medium">✓ Export complete!</p>
+                    <p class="text-sm text-green-600 mt-1" id="export-path"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Store sections data
+        const sectionsData = {{ sections | tojson | safe }};
+        const sectionTypes = {{ section_types | tojson | safe }};
+        const brandConfig = {{ brand_config | tojson | safe }};
+        const newsletterId = {{ newsletter.id }};
+        
+        let currentSectionId = null;
+        let currentSectionType = null;
+        
+        // Color display names for dropdown
+        const colorDisplayNames = {
+            // Project7 colors
+            'primary': 'Primary (OD Green / DK Blue)',
+            'primary_olive': 'Olive Green',
+            'primary_black': 'Near Black',
+            'accent': 'Accent (Lime / Yellow)',
+            'cool_grey': 'Cool Grey',
+            'black': 'Black',
+            'secondary_bg': 'Secondary BG (Light)',
+            'detail_bg': 'Detail BG (Very Light)',
+            'warm_grey': 'Warm Grey',
+            // Aardvark colors
+            'slate_blue': 'Slate Blue',
+            'sky_blue': 'Sky Blue',
+            'lt_sky_blue': 'Light Sky Blue',
+            'lt_beige': 'Light Beige',
+            'dark_accent': 'Dark Accent',
+            // Common
+            'border': 'Border Color',
+            'body_text': 'Body Text',
+            'specs_text': 'Specs Text',
+            'footer_text': 'Footer Text',
+            'footer_muted': 'Footer Muted',
+            '#ffffff': 'White',
+            '#f5f5f5': 'Light Gray',
+            '#e0e0e0': 'Medium Gray'
+        };
+        
+        // Build background color dropdown HTML
+        function buildBgColorDropdown(currentValue) {
+            const colors = brandConfig.colors || {};
+            let options = '<option value="">Default (auto)</option>';
+            options += '<option value="#ffffff"' + (currentValue === '#ffffff' ? ' selected' : '') + '>⬜ White (#ffffff)</option>';
+            
+            // Add brand colors
+            for (const [key, hex] of Object.entries(colors)) {
+                if (typeof hex === 'string' && hex.startsWith('#')) {
+                    const displayName = colorDisplayNames[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                    const selected = currentValue === hex || currentValue === key ? ' selected' : '';
+                    options += `<option value="${hex}"${selected}>⬛ ${displayName} (${hex})</option>`;
+                }
+            }
+            
+            return `
+                <div class="border-t pt-4 mt-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">🎨 Background Color Override</label>
+                    <select name="bg_color_override" class="w-full border rounded-lg px-3 py-2">
+                        ${options}
+                    </select>
+                    <p class="text-xs text-gray-400 mt-1">Leave as "Default" to use the standard color for this section type</p>
+                </div>
+            `;
+        }
+        
+        // Parse section content
+        sectionsData.forEach(s => {
+            if (typeof s.content === 'string') {
+                s.content = JSON.parse(s.content);
+            }
+        });
+        
+        // Select section
+        function selectSection(sectionId) {
+            currentSectionId = sectionId;
+            const section = sectionsData.find(s => s.id === sectionId);
+            currentSectionType = section.section_type;
+            
+            // Update tab styles
+            document.querySelectorAll('.section-tab').forEach(tab => {
+                tab.classList.remove('bg-gray-50');
+            });
+            document.querySelector(`[data-section-id="${sectionId}"]`).classList.add('bg-gray-50');
+            
+            // Update header
+            const typeInfo = sectionTypes.find(t => t.type === section.section_type);
+            document.getElementById('section-title').textContent = typeInfo.name;
+            document.getElementById('section-description').textContent = typeInfo.description;
+            
+            // Render editor
+            renderSectionEditor(section);
+        }
+        
+        // Render section editor based on type
+        function renderSectionEditor(section) {
+            const editor = document.getElementById('section-editor');
+            const content = section.content || {};
+            
+            let html = '';
+            
+            switch (section.section_type) {
+                case 'header':
+                    html = `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Logo URL</label>
+                                <input type="url" name="logo_url" value="${content.logo_url || brandConfig.logo_url || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                <p class="text-xs text-gray-400 mt-1">Leave blank to use default brand logo</p>
+                            </div>
+                            ${buildBgColorDropdown(content.bg_color_override || '')}
+                        </div>
+                    `;
+                    break;
+                    
+                case 'title':
+                    html = `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Newsletter Name</label>
+                                <input type="text" name="newsletter_name" value="${content.newsletter_name || brandConfig.newsletter_name || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="Field Notes">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Month</label>
+                                    <input type="text" name="month" value="${content.month || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="December">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Year</label>
+                                    <input type="text" name="year" value="${content.year || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="2025">
+                                </div>
+                            </div>
+                            ${buildBgColorDropdown(content.bg_color_override || '')}
+                        </div>
+                    `;
+                    break;
+                    
+                case 'opening':
+                    html = `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Opening Hook</label>
+                                <textarea name="hook" rows="2" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="Start with a problem or compelling statement...">${content.hook || ''}</textarea>
+                                <p class="text-xs text-gray-400 mt-1">Bold, attention-grabbing first line</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Overview</label>
+                                <textarea name="overview" rows="3" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="What's in this issue...">${content.overview || ''}</textarea>
+                                <p class="text-xs text-gray-400 mt-1">Brief preview of what's covered</p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
+                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
+                                </div>
+                            </div>
+                            ${buildBgColorDropdown(content.bg_color_override || '')}
+                        </div>
+                    `;
+                    break;
+                    
+                case 'feature':
+                case 'new_product':
+                    const features = content.features || [];
+                    let featuresHtml = features.map((f, i) => `
+                        <div class="flex space-x-2 feature-item">
+                            <input type="text" name="feature_name_${i}" value="${f.name || ''}" placeholder="Feature name" 
+                                   class="flex-1 border rounded px-2 py-1 text-sm">
+                            <input type="text" name="feature_desc_${i}" value="${f.description || ''}" placeholder="Why it matters" 
+                                   class="flex-2 border rounded px-2 py-1 text-sm" style="flex: 2">
+                            <button onclick="removeFeature(${i})" class="text-red-500 hover:text-red-700">✕</button>
+                        </div>
+                    `).join('');
+                    
+                    html = `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Product Name / Title</label>
+                                <input type="text" name="title" value="${content.title || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="Product Name (appears as large header)">
+                                <p class="text-xs text-gray-400 mt-1">Optional. Use for product name that appears above tagline.</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Product Tagline</label>
+                                <input type="text" name="tagline" value="${content.tagline || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="One-line benefit or description">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Problem Statement</label>
+                                <textarea name="problem" rows="3" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="What challenge do operators face?">${content.problem || ''}</textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Solution</label>
+                                <textarea name="solution" rows="3" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="How does this product solve it?">${content.solution || ''}</textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Features</label>
+                                <div id="features-list" class="space-y-2">
+                                    ${featuresHtml}
+                                </div>
+                                <button onclick="addFeature()" class="mt-2 text-sm text-blue-600 hover:text-blue-800">+ Add Feature</button>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Why It Matters</label>
+                                <textarea name="why_it_matters" rows="2" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="Impact statement...">${content.why_it_matters || ''}</textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Specs (optional)</label>
+                                <textarea name="specs" rows="2" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="Technical specifications...">${content.specs || ''}</textarea>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">CTA Button Text</label>
+                                    <input type="text" name="cta_text" value="${content.cta_text || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Learn More">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">CTA URL</label>
+                                    <input type="url" name="cta_url" value="${content.cta_url || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                </div>
+                            </div>
+                            ${buildBgColorDropdown(content.bg_color_override || '')}
+                        </div>
+                    `;
+                    break;
+                    
+                case 'details':
+                    html = `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Topic Title</label>
+                                <input type="text" name="title" value="${content.title || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="Radio Channel Routing">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Subtitle</label>
+                                <input type="text" name="subtitle" value="${content.subtitle || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="Why we run two separate channels...">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
+                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                                <textarea name="content" rows="6" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="Explain the technical detail...">${content.content || ''}</textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Closing Statement (italic)</label>
+                                <input type="text" name="closing" value="${content.closing || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="Small detail. Big difference when...">
+                            </div>
+                            ${buildBgColorDropdown(content.bg_color_override || '')}
+                        </div>
+                    `;
+                    break;
+                    
+                case 'howto':
+                    html = `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Topic Title</label>
+                                <input type="text" name="title" value="${content.title || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="Shield Deployment Considerations">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
+                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Introduction</label>
+                                <textarea name="intro" rows="2" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="Brief intro to the topic...">${content.intro || ''}</textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Subsections (JSON format for now)</label>
+                                <textarea name="subsections" rows="8" class="w-full border rounded-lg px-3 py-2 font-mono text-sm"
+                                          placeholder='[{"heading": "For Vehicle Staging", "items": ["Point 1", "Point 2"]}]'>${JSON.stringify(content.subsections || [], null, 2)}</textarea>
+                                <p class="text-xs text-gray-400 mt-1">Each subsection has a "heading" and "items" array</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Key Principle (italic)</label>
+                                <input type="text" name="key_principle" value="${content.key_principle || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="Key takeaway statement...">
+                            </div>
+                            ${buildBgColorDropdown(content.bg_color_override || '')}
+                        </div>
+                    `;
+                    break;
+                    
+                case 'event':
+                    // Support for multiple events
+                    const events = content.events || [];
+                    const eventCount = content.event_count || events.length || 1;
+                    
+                    // Build event forms
+                    let eventsHtml = '';
+                    for (let i = 0; i < eventCount; i++) {
+                        const event = events[i] || {};
+                        eventsHtml += `
+                            <div class="event-item border border-gray-200 rounded-lg p-4 ${i > 0 ? 'mt-4' : ''}">
+                                <div class="flex justify-between items-center mb-3">
+                                    <span class="font-medium text-gray-700">Event ${i + 1}</span>
+                                    ${i > 0 ? `<button onclick="removeEvent(${i})" class="text-red-500 hover:text-red-700 text-sm">✕ Remove</button>` : ''}
+                                </div>
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-600 mb-1">Event Name</label>
+                                        <input type="text" name="event_name_${i}" value="${event.event_name || ''}" 
+                                               class="w-full border rounded-lg px-3 py-2" placeholder="SHOT Show 2025">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-600 mb-1">Dates</label>
+                                            <input type="text" name="event_dates_${i}" value="${event.dates || ''}" 
+                                                   class="w-full border rounded-lg px-3 py-2" placeholder="January 21-24, 2025">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-600 mb-1">Location</label>
+                                            <input type="text" name="event_location_${i}" value="${event.location || ''}" 
+                                                   class="w-full border rounded-lg px-3 py-2" placeholder="Las Vegas, NV">
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-600 mb-1">Description</label>
+                                        <textarea name="event_description_${i}" rows="2" class="w-full border rounded-lg px-3 py-2"
+                                                  placeholder="What to expect at the booth...">${event.description || ''}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    html = `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Section Headline</label>
+                                <input type="text" name="headline" value="${content.headline || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="SEE US AT">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
+                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center justify-between">
+                                <label class="block text-sm font-medium text-gray-700">Events</label>
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm text-gray-500">Number of events:</span>
+                                    <select id="event-count-selector" onchange="updateEventCount(this.value)" 
+                                            class="border rounded px-2 py-1 text-sm">
+                                        ${[1,2,3,4,5].map(n => `<option value="${n}" ${eventCount === n ? 'selected' : ''}>${n}</option>`).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <input type="hidden" name="event_count" value="${eventCount}">
+                            
+                            <div id="events-list">
+                                ${eventsHtml}
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Closing Message (italic, shared)</label>
+                                <input type="text" name="closing" value="${content.closing || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="Stop by and say hello!">
+                            </div>
+                            ${buildBgColorDropdown(content.bg_color_override || '')}
+                        </div>
+                    `;
+                    break;
+                    
+                case 'wrapup':
+                    html = `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Section Title</label>
+                                <input type="text" name="title" value="${content.title || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="That's It for December">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Next Month Preview</label>
+                                <textarea name="next_month_preview" rows="2" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="Next month: We'll cover...">${content.next_month_preview || ''}</textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Call to Action</label>
+                                <input type="text" name="cta_text" value="${content.cta_text || 'Questions about anything we covered? Hit reply. We read every message.'}" 
+                                       class="w-full border rounded-lg px-3 py-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Signature</label>
+                                <input type="text" name="signature" value="${content.signature || brandConfig.signature || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="—The Team">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
+                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
+                                </div>
+                            </div>
+                            ${buildBgColorDropdown(content.bg_color_override || '')}
+                        </div>
+                    `;
+                    break;
+                    
+                case 'footer':
+                    html = `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Tagline</label>
+                                <textarea name="tagline" rows="2" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="Company mission statement...">${content.tagline || brandConfig.tagline || ''}</textarea>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
+                                    <input type="url" name="website_url" value="${content.website_url || brandConfig.website_url || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Contact URL</label>
+                                    <input type="url" name="contact_url" value="${content.contact_url || brandConfig.contact_url || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Preferences URL</label>
+                                    <input type="text" name="preferences_url" value="${content.preferences_url || 'YOUR_PREFERENCES_URL'}" 
+                                           class="w-full border rounded-lg px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Unsubscribe URL</label>
+                                    <input type="text" name="unsubscribe_url" value="${content.unsubscribe_url || 'YOUR_UNSUBSCRIBE_URL'}" 
+                                           class="w-full border rounded-lg px-3 py-2">
+                                </div>
+                            </div>
+                            ${buildBgColorDropdown(content.bg_color_override || '')}
+                        </div>
+                    `;
+                    break;
+                    
+                default:
+                    html = '<p class="text-gray-500">Unknown section type</p>';
+            }
+            
+            editor.innerHTML = html;
+        }
+        
+        // Add feature to product section
+        function addFeature() {
+            const list = document.getElementById('features-list');
+            const count = list.children.length;
+            const div = document.createElement('div');
+            div.className = 'flex space-x-2 feature-item';
+            div.innerHTML = `
+                <input type="text" name="feature_name_${count}" placeholder="Feature name" 
+                       class="flex-1 border rounded px-2 py-1 text-sm">
+                <input type="text" name="feature_desc_${count}" placeholder="Why it matters" 
+                       class="flex-2 border rounded px-2 py-1 text-sm" style="flex: 2">
+                <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700">✕</button>
+            `;
+            list.appendChild(div);
+        }
+        
+        // Update event count - re-render the events section
+        function updateEventCount(newCount) {
+            newCount = parseInt(newCount);
+            const eventsList = document.getElementById('events-list');
+            const eventCountInput = document.querySelector('[name="event_count"]');
+            
+            // Collect existing event data
+            const existingEvents = [];
+            const oldCount = eventsList.querySelectorAll('.event-item').length;
+            for (let i = 0; i < oldCount; i++) {
+                existingEvents.push({
+                    event_name: document.querySelector(`[name="event_name_${i}"]`)?.value || '',
+                    dates: document.querySelector(`[name="event_dates_${i}"]`)?.value || '',
+                    location: document.querySelector(`[name="event_location_${i}"]`)?.value || '',
+                    description: document.querySelector(`[name="event_description_${i}"]`)?.value || ''
+                });
+            }
+            
+            // Rebuild events HTML
+            let eventsHtml = '';
+            for (let i = 0; i < newCount; i++) {
+                const event = existingEvents[i] || {};
+                eventsHtml += `
+                    <div class="event-item border border-gray-200 rounded-lg p-4 ${i > 0 ? 'mt-4' : ''}">
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="font-medium text-gray-700">Event ${i + 1}</span>
+                            ${i > 0 ? `<button onclick="removeEvent(${i})" class="text-red-500 hover:text-red-700 text-sm">✕ Remove</button>` : ''}
+                        </div>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Event Name</label>
+                                <input type="text" name="event_name_${i}" value="${event.event_name || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="SHOT Show 2025">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Dates</label>
+                                    <input type="text" name="event_dates_${i}" value="${event.dates || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="January 21-24, 2025">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Location</label>
+                                    <input type="text" name="event_location_${i}" value="${event.location || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Las Vegas, NV">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Description</label>
+                                <textarea name="event_description_${i}" rows="2" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="What to expect at the booth...">${event.description || ''}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            eventsList.innerHTML = eventsHtml;
+            eventCountInput.value = newCount;
+        }
+        
+        // Remove a specific event
+        function removeEvent(indexToRemove) {
+            const selector = document.getElementById('event-count-selector');
+            const currentCount = parseInt(selector.value);
+            if (currentCount <= 1) return;
+            
+            // Collect all events except the one being removed
+            const events = [];
+            for (let i = 0; i < currentCount; i++) {
+                if (i !== indexToRemove) {
+                    events.push({
+                        event_name: document.querySelector(`[name="event_name_${i}"]`)?.value || '',
+                        dates: document.querySelector(`[name="event_dates_${i}"]`)?.value || '',
+                        location: document.querySelector(`[name="event_location_${i}"]`)?.value || '',
+                        description: document.querySelector(`[name="event_description_${i}"]`)?.value || ''
+                    });
+                }
+            }
+            
+            // Update count and rebuild
+            selector.value = currentCount - 1;
+            
+            // Rebuild with collected data
+            const eventsList = document.getElementById('events-list');
+            const eventCountInput = document.querySelector('[name="event_count"]');
+            const newCount = events.length;
+            
+            let eventsHtml = '';
+            for (let i = 0; i < newCount; i++) {
+                const event = events[i];
+                eventsHtml += `
+                    <div class="event-item border border-gray-200 rounded-lg p-4 ${i > 0 ? 'mt-4' : ''}">
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="font-medium text-gray-700">Event ${i + 1}</span>
+                            ${i > 0 ? `<button onclick="removeEvent(${i})" class="text-red-500 hover:text-red-700 text-sm">✕ Remove</button>` : ''}
+                        </div>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Event Name</label>
+                                <input type="text" name="event_name_${i}" value="${event.event_name || ''}" 
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="SHOT Show 2025">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Dates</label>
+                                    <input type="text" name="event_dates_${i}" value="${event.dates || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="January 21-24, 2025">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-600 mb-1">Location</label>
+                                    <input type="text" name="event_location_${i}" value="${event.location || ''}" 
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Las Vegas, NV">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Description</label>
+                                <textarea name="event_description_${i}" rows="2" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="What to expect at the booth...">${event.description || ''}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            eventsList.innerHTML = eventsHtml;
+            eventCountInput.value = newCount;
+        }
+        
+        // Save current section
+        async function saveCurrentSection() {
+            if (!currentSectionId) {
+                alert('No section selected');
+                return;
+            }
+            
+            const editor = document.getElementById('section-editor');
+            const inputs = editor.querySelectorAll('input, textarea, select');
+            const content = {};
+            
+            // Special handling for features
+            if (currentSectionType === 'feature' || currentSectionType === 'new_product') {
+                content.features = [];
+                let i = 0;
+                while (true) {
+                    const nameInput = editor.querySelector(`[name="feature_name_${i}"]`);
+                    const descInput = editor.querySelector(`[name="feature_desc_${i}"]`);
+                    if (!nameInput) break;
+                    if (nameInput.value || descInput.value) {
+                        content.features.push({
+                            name: nameInput.value,
+                            description: descInput.value
+                        });
+                    }
+                    i++;
+                }
+            }
+            
+            // Special handling for events (multiple events support)
+            if (currentSectionType === 'event') {
+                content.events = [];
+                const eventCountInput = editor.querySelector('[name="event_count"]');
+                const eventCount = parseInt(eventCountInput?.value || '1');
+                content.event_count = eventCount;
+                
+                for (let i = 0; i < eventCount; i++) {
+                    const eventName = editor.querySelector(`[name="event_name_${i}"]`)?.value || '';
+                    const dates = editor.querySelector(`[name="event_dates_${i}"]`)?.value || '';
+                    const location = editor.querySelector(`[name="event_location_${i}"]`)?.value || '';
+                    const description = editor.querySelector(`[name="event_description_${i}"]`)?.value || '';
+                    
+                    content.events.push({
+                        event_name: eventName,
+                        dates: dates,
+                        location: location,
+                        description: description
+                    });
+                }
+            }
+            
+            // Special handling for subsections (JSON)
+            if (currentSectionType === 'howto') {
+                const subsectionsInput = editor.querySelector('[name="subsections"]');
+                try {
+                    content.subsections = JSON.parse(subsectionsInput.value || '[]');
+                } catch (e) {
+                    alert('Invalid JSON in subsections field');
+                    return;
+                }
+            }
+            
+            inputs.forEach(input => {
+                const name = input.name;
+                // Skip special fields that are handled above
+                if (name && !name.startsWith('feature_') && !name.startsWith('event_name_') && 
+                    !name.startsWith('event_dates_') && !name.startsWith('event_location_') && 
+                    !name.startsWith('event_description_') && name !== 'subsections' && name !== 'event_count') {
+                    content[name] = input.value;
+                }
+            });
+            
+            try {
+                const response = await fetch(`/api/sections/${currentSectionId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content, enabled: 1})
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    // Update local data
+                    const section = sectionsData.find(s => s.id === currentSectionId);
+                    section.content = content;
+                    
+                    // Show success
+                    showToast('Section saved!');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error saving section');
+            }
+        }
+        
+        // Toggle section enabled/disabled
+        async function toggleSection(sectionId, enabled) {
+            try {
+                const response = await fetch(`/api/sections/${sectionId}/toggle`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                // Update UI
+                const tab = document.querySelector(`[data-section-id="${sectionId}"]`);
+                if (result.enabled) {
+                    tab.classList.remove('section-disabled');
+                    tab.classList.add('section-enabled');
+                    tab.querySelector('span:last-of-type').textContent = '●';
+                    tab.querySelector('span:last-of-type').className = 'text-xs text-green-600 ml-2';
+                } else {
+                    tab.classList.add('section-disabled');
+                    tab.classList.remove('section-enabled');
+                    tab.querySelector('span:last-of-type').textContent = '○';
+                    tab.querySelector('span:last-of-type').className = 'text-xs text-gray-400 ml-2';
+                }
+                
+                // Update local data
+                const section = sectionsData.find(s => s.id === sectionId);
+                section.enabled = result.enabled ? 1 : 0;
+                
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+        
+        // Image upload
+        async function uploadImage(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('newsletter_id', newsletterId);
+            
+            try {
+                const response = await fetch('/api/images/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    // Add to grid
+                    const grid = document.getElementById('images-grid');
+                    const div = document.createElement('div');
+                    div.className = 'relative group';
+                    div.innerHTML = `
+                        <img src="${result.url}" alt="${file.name}" 
+                             class="w-full h-24 object-cover rounded cursor-pointer hover:ring-2 hover:ring-blue-500"
+                             onclick="copyImageUrl('${result.url}')">
+                        <div class="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition rounded flex items-center justify-center">
+                            <span class="text-white text-xs">Click to copy URL</span>
+                        </div>
+                    `;
+                    grid.appendChild(div);
+                    
+                    showToast('Image uploaded!');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error uploading image');
+            }
+            
+            input.value = '';
+        }
+        
+        // Copy image URL
+        function copyImageUrl(url) {
+            // Make it absolute
+            const fullUrl = window.location.origin + url;
+            navigator.clipboard.writeText(fullUrl);
+            showToast('URL copied to clipboard!');
+        }
+        
+        // Export functions
+        function exportNewsletter() {
+            document.getElementById('export-modal').classList.remove('hidden');
+            document.getElementById('export-modal').classList.add('flex');
+            document.getElementById('export-result').classList.add('hidden');
+        }
+        
+        function closeExportModal() {
+            document.getElementById('export-modal').classList.add('hidden');
+            document.getElementById('export-modal').classList.remove('flex');
+        }
+        
+        async function doExport() {
+            const version = document.querySelector('input[name="export-version"]:checked').value;
+            
+            try {
+                if (version === 'both') {
+                    // Download both email and website versions
+                    const emailResponse = await fetch(`/api/newsletters/${newsletterId}/export/email`);
+                    const websiteResponse = await fetch(`/api/newsletters/${newsletterId}/export/website`);
+                    
+                    if (emailResponse.ok && websiteResponse.ok) {
+                        // Download email version
+                        await downloadFile(emailResponse, 'email');
+                        // Small delay between downloads
+                        setTimeout(async () => {
+                            await downloadFile(websiteResponse, 'website');
+                        }, 100);
+                        
+                        // Show success message
+                        document.getElementById('export-result').classList.remove('hidden');
+                        document.getElementById('export-path').textContent = `Downloaded: Email and Website versions`;
+                        
+                        // Close modal after short delay
+                        setTimeout(() => {
+                            closeExportModal();
+                        }, 2000);
+                    } else {
+                        throw new Error('Export failed');
+                    }
+                } else {
+                    // Single version export
+                    const response = await fetch(`/api/newsletters/${newsletterId}/export`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({version})
+                    });
+                    
+                    if (response.ok) {
+                        await downloadFile(response, version);
+                        
+                        // Show success message
+                        document.getElementById('export-result').classList.remove('hidden');
+                        document.getElementById('export-path').textContent = `Downloaded: ${version.charAt(0).toUpperCase() + version.slice(1)} version`;
+                        
+                        // Close modal after short delay
+                        setTimeout(() => {
+                            closeExportModal();
+                        }, 2000);
+                    } else {
+                        throw new Error('Export failed');
+                    }
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error exporting newsletter');
+            }
+        }
+        
+        // Helper function to download a file from response
+        async function downloadFile(response, versionType) {
+            // Get the filename from Content-Disposition header
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `newsletter_${versionType}.html`;
+            if (contentDisposition) {
+                const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                if (match) {
+                    filename = match[1].replace(/['"]/g, '');
+                }
+            }
+            
+            // Get the file content as blob
+            const blob = await response.blob();
+            
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+        
+        // AI Modal state
+        let aiSelectedImages = [];  // Changed to array for multi-select
+        let aiGeneratedContent = null;
+        let aiImages = [];
+        let aiProductUrl = null;
+        let aiCurrentSectionType = null;
+        
+        // Section type display names
+        const sectionTypeNames = {
+            'feature': 'Featured Product',
+            'new_product': 'New Product',
+            'opening': 'Opening Hook',
+            'details': 'Details Matter',
+            'howto': 'How-To',
+            'event': 'Event',
+            'wrapup': 'Wrap Up'
+        };
+        
+        // AI Modal functions
+        function openAIModal() {
+            document.getElementById('ai-modal').classList.remove('hidden');
+            document.getElementById('ai-modal').classList.add('flex');
+            resetAIModal();
+        }
+        
+        function closeAIModal() {
+            document.getElementById('ai-modal').classList.add('hidden');
+            document.getElementById('ai-modal').classList.remove('flex');
+        }
+        
+        function resetAIModal() {
+            document.getElementById('ai-step-input').classList.remove('hidden');
+            document.getElementById('ai-step-review').classList.add('hidden');
+            document.getElementById('ai-error').classList.add('hidden');
+            document.getElementById('ai-loading').classList.add('hidden');
+            document.getElementById('ai-generate-btn').classList.remove('hidden');
+            aiSelectedImages = [];
+            aiGeneratedContent = null;
+            aiImages = [];
+            aiProductUrl = null;
+            aiCurrentSectionType = null;
+            updateAIMode();
+        }
+        
+        function updateAIMode() {
+            const mode = document.getElementById('ai-mode').value;
+            const inputArea = document.getElementById('ai-input-area');
+            const urlInput = document.getElementById('ai-url-input');
+            const supplementalUrl = document.getElementById('ai-supplemental-url');
+            
+            if (mode === 'from_url') {
+                inputArea.classList.add('hidden');
+                urlInput.classList.remove('hidden');
+                if (supplementalUrl) supplementalUrl.classList.remove('hidden');
+            } else {
+                inputArea.classList.remove('hidden');
+                urlInput.classList.add('hidden');
+                if (supplementalUrl) supplementalUrl.classList.add('hidden');
+            }
+        }
+        
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Build section-specific review fields
+        function buildReviewFields(sectionType, content) {
+            const container = document.getElementById('ai-dynamic-fields');
+            let html = '';
+            
+            if (sectionType === 'feature' || sectionType === 'new_product') {
+                const features = content.features || [];
+                let featuresHtml = features.map((f, i) => `
+                    <div class="flex space-x-2 ai-feature-row">
+                        <input type="text" value="${escapeHtml(f.name || '')}" placeholder="Feature name" 
+                               class="flex-1 border rounded px-2 py-1 text-sm ai-feature-name">
+                        <input type="text" value="${escapeHtml(f.description || '')}" placeholder="Why it matters" 
+                               class="flex-2 border rounded px-2 py-1 text-sm ai-feature-desc" style="flex: 2">
+                        <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700 px-2">✕</button>
+                    </div>
+                `).join('');
+                
+                html = `
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tagline</label>
+                        <input type="text" id="ai-field-tagline" value="${escapeHtml(content.tagline || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Problem Statement</label>
+                        <textarea id="ai-field-problem" rows="3" class="w-full border rounded-lg px-3 py-2">${escapeHtml(content.problem || '')}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Solution</label>
+                        <textarea id="ai-field-solution" rows="3" class="w-full border rounded-lg px-3 py-2">${escapeHtml(content.solution || '')}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Features</label>
+                        <div id="ai-field-features" class="space-y-2">${featuresHtml}</div>
+                        <button onclick="addAIFeature()" class="mt-2 text-sm text-purple-600 hover:text-purple-800">+ Add Feature</button>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Why It Matters</label>
+                        <textarea id="ai-field-why" rows="2" class="w-full border rounded-lg px-3 py-2">${escapeHtml(content.why_it_matters || '')}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Specs</label>
+                        <input type="text" id="ai-field-specs" value="${escapeHtml(content.specs || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                `;
+            } else if (sectionType === 'opening') {
+                html = `
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Opening Hook</label>
+                        <textarea id="ai-field-hook" rows="2" class="w-full border rounded-lg px-3 py-2">${escapeHtml(content.hook || '')}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Overview</label>
+                        <textarea id="ai-field-overview" rows="3" class="w-full border rounded-lg px-3 py-2">${escapeHtml(content.overview || '')}</textarea>
+                    </div>
+                `;
+            } else if (sectionType === 'details') {
+                html = `
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Topic Title</label>
+                        <input type="text" id="ai-field-title" value="${escapeHtml(content.title || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Subtitle</label>
+                        <input type="text" id="ai-field-subtitle" value="${escapeHtml(content.subtitle || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                        <textarea id="ai-field-content" rows="6" class="w-full border rounded-lg px-3 py-2">${escapeHtml(content.content || '')}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Closing (italic)</label>
+                        <input type="text" id="ai-field-closing" value="${escapeHtml(content.closing || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                `;
+            } else if (sectionType === 'howto') {
+                const subsections = content.subsections || [];
+                let subsectionsHtml = subsections.map((sub, i) => `
+                    <div class="border rounded-lg p-3 mb-2 ai-subsection" data-index="${i}">
+                        <input type="text" value="${escapeHtml(sub.heading || '')}" placeholder="Heading" 
+                               class="w-full border rounded px-2 py-1 text-sm mb-2 ai-subsection-heading">
+                        <div class="ai-subsection-items space-y-1">
+                            ${(sub.items || []).map(item => `
+                                <div class="flex space-x-2">
+                                    <input type="text" value="${escapeHtml(item)}" class="flex-1 border rounded px-2 py-1 text-sm ai-subsection-item">
+                                    <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700">✕</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <button onclick="addSubsectionItem(${i})" class="mt-1 text-xs text-purple-600 hover:text-purple-800">+ Add Item</button>
+                    </div>
+                `).join('');
+                
+                html = `
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                        <input type="text" id="ai-field-title" value="${escapeHtml(content.title || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Intro</label>
+                        <textarea id="ai-field-intro" rows="2" class="w-full border rounded-lg px-3 py-2">${escapeHtml(content.intro || '')}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Subsections</label>
+                        <div id="ai-field-subsections">${subsectionsHtml}</div>
+                        <button onclick="addSubsection()" class="mt-2 text-sm text-purple-600 hover:text-purple-800">+ Add Subsection</button>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Key Principle</label>
+                        <input type="text" id="ai-field-key-principle" value="${escapeHtml(content.key_principle || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                `;
+            } else if (sectionType === 'event') {
+                html = `
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Headline</label>
+                        <input type="text" id="ai-field-headline" value="${escapeHtml(content.headline || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Event Name</label>
+                        <input type="text" id="ai-field-event-name" value="${escapeHtml(content.event_name || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Dates</label>
+                            <input type="text" id="ai-field-dates" value="${escapeHtml(content.dates || '')}" class="w-full border rounded-lg px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                            <input type="text" id="ai-field-location" value="${escapeHtml(content.location || '')}" class="w-full border rounded-lg px-3 py-2">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea id="ai-field-description" rows="2" class="w-full border rounded-lg px-3 py-2">${escapeHtml(content.description || '')}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Closing CTA</label>
+                        <input type="text" id="ai-field-closing" value="${escapeHtml(content.closing || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                `;
+            } else if (sectionType === 'wrapup') {
+                html = `
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                        <input type="text" id="ai-field-title" value="${escapeHtml(content.title || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Next Month Preview</label>
+                        <textarea id="ai-field-preview" rows="2" class="w-full border rounded-lg px-3 py-2">${escapeHtml(content.next_month_preview || '')}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">CTA Text</label>
+                        <input type="text" id="ai-field-cta" value="${escapeHtml(content.cta_text || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        }
+        
+        // Helper functions for howto subsections
+        function addSubsection() {
+            const container = document.getElementById('ai-field-subsections');
+            const idx = container.querySelectorAll('.ai-subsection').length;
+            const div = document.createElement('div');
+            div.className = 'border rounded-lg p-3 mb-2 ai-subsection';
+            div.dataset.index = idx;
+            div.innerHTML = `
+                <input type="text" placeholder="Heading" class="w-full border rounded px-2 py-1 text-sm mb-2 ai-subsection-heading">
+                <div class="ai-subsection-items space-y-1"></div>
+                <button onclick="addSubsectionItem(${idx})" class="mt-1 text-xs text-purple-600 hover:text-purple-800">+ Add Item</button>
+            `;
+            container.appendChild(div);
+        }
+        
+        function addSubsectionItem(idx) {
+            const subsection = document.querySelector(`.ai-subsection[data-index="${idx}"] .ai-subsection-items`);
+            const div = document.createElement('div');
+            div.className = 'flex space-x-2';
+            div.innerHTML = `
+                <input type="text" class="flex-1 border rounded px-2 py-1 text-sm ai-subsection-item">
+                <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700">✕</button>
+            `;
+            subsection.appendChild(div);
+        }
+        
+        async function generateAIContent() {
+            const mode = document.getElementById('ai-mode').value;
+            const input = mode === 'from_url' 
+                ? document.getElementById('ai-url').value
+                : document.getElementById('ai-input').value;
+            const guidance = document.getElementById('ai-guidance').value;
+            const supplementalUrl = document.getElementById('ai-url-supplemental')?.value || '';
+            
+            if (!input.trim()) {
+                alert('Please enter a URL or content');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('ai-loading').classList.remove('hidden');
+            document.getElementById('ai-generate-btn').classList.add('hidden');
+            document.getElementById('ai-error').classList.add('hidden');
+            
+            try {
+                const response = await fetch('/api/ai/generate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        section_type: currentSectionType,
+                        prompt_type: mode,
+                        input_content: input,
+                        guidance: guidance,
+                        supplemental_url: supplementalUrl,
+                        brand_config: brandConfig
+                    })
+                });
+                
+                const result = await response.json();
+                
+                document.getElementById('ai-loading').classList.add('hidden');
+                
+                if (result.success) {
+                    aiGeneratedContent = result.content;
+                    aiImages = result.images || [];
+                    aiCurrentSectionType = result.section_type || currentSectionType;
+                    
+                    // Store product URL for CTA auto-fill
+                    if (result.scraped_data && result.scraped_data.url) {
+                        aiProductUrl = result.scraped_data.url;
+                    } else if (mode === 'from_url') {
+                        aiProductUrl = input;
+                    }
+                    
+                    // Show review step
+                    document.getElementById('ai-step-input').classList.add('hidden');
+                    document.getElementById('ai-step-review').classList.remove('hidden');
+                    
+                    // Set section type label
+                    document.getElementById('ai-section-type-label').textContent = sectionTypeNames[aiCurrentSectionType] || aiCurrentSectionType;
+                    
+                    // Populate images with multi-select
+                    if (aiImages.length > 0) {
+                        const imagesGrid = document.getElementById('ai-images-grid');
+                        imagesGrid.innerHTML = aiImages.map((img, idx) => `
+                            <div class="relative cursor-pointer ai-image-option" data-url="${img.url}" data-idx="${idx}" onclick="toggleAIImage(${idx}, '${img.url}')">
+                                <img src="${img.url}" alt="${img.alt || 'Product image'}" 
+                                     class="w-full h-20 object-cover rounded border-2 border-transparent hover:border-purple-400 transition"
+                                     id="ai-img-${idx}"
+                                     onerror="this.parentElement.style.display='none'">
+                                <div class="absolute top-1 right-1 w-5 h-5 rounded-full bg-white border-2 border-gray-300 hidden" id="ai-img-check-${idx}">
+                                    <svg class="w-full h-full text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        `).join('');
+                        document.getElementById('ai-images-section').classList.remove('hidden');
+                        updateSelectedCount();
+                    } else {
+                        document.getElementById('ai-images-section').classList.add('hidden');
+                    }
+                    
+                    // Build section-specific fields
+                    if (result.structured && aiGeneratedContent) {
+                        document.getElementById('ai-raw-text').classList.add('hidden');
+                        buildReviewFields(aiCurrentSectionType, aiGeneratedContent);
+                    } else {
+                        // Show raw text fallback
+                        document.getElementById('ai-dynamic-fields').innerHTML = '';
+                        document.getElementById('ai-raw-text').classList.remove('hidden');
+                        document.getElementById('ai-field-raw').value = aiGeneratedContent.raw_text || JSON.stringify(aiGeneratedContent, null, 2);
+                    }
+                    
+                } else {
+                    document.getElementById('ai-generate-btn').classList.remove('hidden');
+                    document.getElementById('ai-error-message').textContent = result.error || 'Unknown error occurred';
+                    document.getElementById('ai-error').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('ai-loading').classList.add('hidden');
+                document.getElementById('ai-generate-btn').classList.remove('hidden');
+                document.getElementById('ai-error-message').textContent = 'Failed to connect to server: ' + error.message;
+                document.getElementById('ai-error').classList.remove('hidden');
+            }
+        }
+        
+        function toggleAIImage(idx, url) {
+            const imgEl = document.getElementById(`ai-img-${idx}`);
+            const checkEl = document.getElementById(`ai-img-check-${idx}`);
+            
+            const existingIdx = aiSelectedImages.indexOf(url);
+            if (existingIdx > -1) {
+                // Deselect
+                aiSelectedImages.splice(existingIdx, 1);
+                imgEl.classList.remove('border-purple-500', 'ring-2', 'ring-purple-500');
+                imgEl.classList.add('border-transparent');
+                checkEl.classList.add('hidden');
+            } else {
+                // Select
+                aiSelectedImages.push(url);
+                imgEl.classList.remove('border-transparent');
+                imgEl.classList.add('border-purple-500', 'ring-2', 'ring-purple-500');
+                checkEl.classList.remove('hidden');
+            }
+            updateSelectedCount();
+        }
+        
+        function updateSelectedCount() {
+            document.getElementById('ai-selected-count').textContent = aiSelectedImages.length;
+        }
+        
+        function addAIFeature() {
+            const container = document.getElementById('ai-field-features');
+            const div = document.createElement('div');
+            div.className = 'flex space-x-2 ai-feature-row';
+            div.innerHTML = `
+                <input type="text" placeholder="Feature name" class="flex-1 border rounded px-2 py-1 text-sm ai-feature-name">
+                <input type="text" placeholder="Why it matters" class="flex-2 border rounded px-2 py-1 text-sm ai-feature-desc" style="flex: 2">
+                <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700 px-2">✕</button>
+            `;
+            container.appendChild(div);
+        }
+        
+        function applyAIContent() {
+            if (!currentSectionId) {
+                alert('No section selected. Please select a section first.');
+                return;
+            }
+            
+            const editor = document.getElementById('section-editor');
+            
+            // Check if raw text mode
+            if (!document.getElementById('ai-raw-text').classList.contains('hidden')) {
+                const rawText = document.getElementById('ai-field-raw').value;
+                navigator.clipboard.writeText(rawText);
+                showToast('Content copied to clipboard. Please paste into fields manually.');
+                closeAIModal();
+                return;
+            }
+            
+            // Apply section-specific content
+            if (aiCurrentSectionType === 'feature' || aiCurrentSectionType === 'new_product') {
+                applyProductContent(editor);
+            } else if (aiCurrentSectionType === 'opening') {
+                applyOpeningContent(editor);
+            } else if (aiCurrentSectionType === 'details') {
+                applyDetailsContent(editor);
+            } else if (aiCurrentSectionType === 'howto') {
+                applyHowtoContent(editor);
+            } else if (aiCurrentSectionType === 'event') {
+                applyEventContent(editor);
+            } else if (aiCurrentSectionType === 'wrapup') {
+                applyWrapupContent(editor);
+            }
+            
+            showToast('Content applied to section! Remember to save.');
+            closeAIModal();
+        }
+        
+        function applyProductContent(editor) {
+            const tagline = document.getElementById('ai-field-tagline')?.value || '';
+            const problem = document.getElementById('ai-field-problem')?.value || '';
+            const solution = document.getElementById('ai-field-solution')?.value || '';
+            const why = document.getElementById('ai-field-why')?.value || '';
+            const specs = document.getElementById('ai-field-specs')?.value || '';
+            
+            // Gather features
+            const featureRows = document.querySelectorAll('.ai-feature-row');
+            const features = [];
+            featureRows.forEach(row => {
+                const name = row.querySelector('.ai-feature-name')?.value || '';
+                const desc = row.querySelector('.ai-feature-desc')?.value || '';
+                if (name || desc) features.push({ name, description: desc });
+            });
+            
+            // Fill fields
+            const taglineField = editor.querySelector('[name="tagline"]');
+            const problemField = editor.querySelector('[name="problem"]');
+            const solutionField = editor.querySelector('[name="solution"]');
+            const whyField = editor.querySelector('[name="why_it_matters"]');
+            const specsField = editor.querySelector('[name="specs"]');
+            const imageField = editor.querySelector('[name="image_url"]');
+            const ctaTextField = editor.querySelector('[name="cta_text"]');
+            const ctaUrlField = editor.querySelector('[name="cta_url"]');
+            
+            if (taglineField) taglineField.value = tagline;
+            if (problemField) problemField.value = problem;
+            if (solutionField) solutionField.value = solution;
+            if (whyField) whyField.value = why;
+            if (specsField) specsField.value = specs;
+            if (imageField && aiSelectedImages.length > 0) imageField.value = aiSelectedImages[0];
+            if (ctaTextField && !ctaTextField.value) ctaTextField.value = 'Learn More';
+            if (ctaUrlField && aiProductUrl) ctaUrlField.value = aiProductUrl;
+            
+            // Apply features
+            const featuresContainer = document.getElementById('features-list');
+            if (featuresContainer && features.length > 0) {
+                featuresContainer.innerHTML = '';
+                features.forEach((f, i) => {
+                    const div = document.createElement('div');
+                    div.className = 'flex space-x-2 feature-item';
+                    div.innerHTML = `
+                        <input type="text" name="feature_name_${i}" value="${f.name}" placeholder="Feature name" 
+                               class="flex-1 border rounded px-2 py-1 text-sm">
+                        <input type="text" name="feature_desc_${i}" value="${f.description}" placeholder="Why it matters" 
+                               class="flex-2 border rounded px-2 py-1 text-sm" style="flex: 2">
+                        <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700">✕</button>
+                    `;
+                    featuresContainer.appendChild(div);
+                });
+            }
+        }
+        
+        function applyOpeningContent(editor) {
+            const hook = document.getElementById('ai-field-hook')?.value || '';
+            const overview = document.getElementById('ai-field-overview')?.value || '';
+            
+            const hookField = editor.querySelector('[name="hook"]');
+            const overviewField = editor.querySelector('[name="overview"]');
+            
+            if (hookField) hookField.value = hook;
+            if (overviewField) overviewField.value = overview;
+        }
+        
+        function applyDetailsContent(editor) {
+            const title = document.getElementById('ai-field-title')?.value || '';
+            const subtitle = document.getElementById('ai-field-subtitle')?.value || '';
+            const content = document.getElementById('ai-field-content')?.value || '';
+            const closing = document.getElementById('ai-field-closing')?.value || '';
+            
+            const titleField = editor.querySelector('[name="title"]');
+            const subtitleField = editor.querySelector('[name="subtitle"]');
+            const contentField = editor.querySelector('[name="content"]');
+            const closingField = editor.querySelector('[name="closing"]');
+            
+            if (titleField) titleField.value = title;
+            if (subtitleField) subtitleField.value = subtitle;
+            if (contentField) contentField.value = content;
+            if (closingField) closingField.value = closing;
+        }
+        
+        function applyHowtoContent(editor) {
+            const title = document.getElementById('ai-field-title')?.value || '';
+            const intro = document.getElementById('ai-field-intro')?.value || '';
+            const keyPrinciple = document.getElementById('ai-field-key-principle')?.value || '';
+            
+            const titleField = editor.querySelector('[name="title"]');
+            const introField = editor.querySelector('[name="intro"]');
+            const keyPrincipleField = editor.querySelector('[name="key_principle"]');
+            
+            if (titleField) titleField.value = title;
+            if (introField) introField.value = intro;
+            if (keyPrincipleField) keyPrincipleField.value = keyPrinciple;
+        }
+        
+        function applyEventContent(editor) {
+            const headline = document.getElementById('ai-field-headline')?.value || '';
+            const eventName = document.getElementById('ai-field-event-name')?.value || '';
+            const dates = document.getElementById('ai-field-dates')?.value || '';
+            const location = document.getElementById('ai-field-location')?.value || '';
+            const description = document.getElementById('ai-field-description')?.value || '';
+            const closing = document.getElementById('ai-field-closing')?.value || '';
+            
+            const headlineField = editor.querySelector('[name="headline"]');
+            // For multi-event format, apply to first event (index 0)
+            const eventNameField = editor.querySelector('[name="event_name_0"]');
+            const datesField = editor.querySelector('[name="event_dates_0"]');
+            const locationField = editor.querySelector('[name="event_location_0"]');
+            const descriptionField = editor.querySelector('[name="event_description_0"]');
+            const closingField = editor.querySelector('[name="closing"]');
+            
+            if (headlineField) headlineField.value = headline;
+            if (eventNameField) eventNameField.value = eventName;
+            if (datesField) datesField.value = dates;
+            if (locationField) locationField.value = location;
+            if (descriptionField) descriptionField.value = description;
+            if (closingField) closingField.value = closing;
+        }
+        
+        function applyWrapupContent(editor) {
+            const title = document.getElementById('ai-field-title')?.value || '';
+            const preview = document.getElementById('ai-field-preview')?.value || '';
+            const cta = document.getElementById('ai-field-cta')?.value || '';
+            
+            const titleField = editor.querySelector('[name="title"]');
+            const previewField = editor.querySelector('[name="next_month_preview"]');
+            const ctaField = editor.querySelector('[name="cta_text"]');
+            
+            if (titleField) titleField.value = title;
+            if (previewField) previewField.value = preview;
+            if (ctaField) ctaField.value = cta;
+        }
+        
+        function regenerateAI() {
+            resetAIModal();
+            generateAIContent();
+        }
+        
+        // Toast notification
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-pulse';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+        
+        // Initialize - select first section
+        document.addEventListener('DOMContentLoaded', () => {
+            if (sectionsData.length > 0) {
+                selectSection(sectionsData[0].id);
+            }
+        });
+        
+        // Close modals on outside click
+        document.getElementById('ai-modal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeAIModal();
+        });
+        document.getElementById('export-modal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeExportModal();
+        });
+    </script>
+</body>
+</html>
