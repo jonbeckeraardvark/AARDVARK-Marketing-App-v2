@@ -1845,6 +1845,11 @@ def get_default_section_content(section_type: str) -> dict:
             "viewport_detail": "",
             "why_it_matters": "",
             "specs": "",
+            "cta_count": 1,
+            "ctas": [
+                {"text": "", "url": ""}
+            ],
+            # Keep legacy fields for backward compatibility
             "cta_text": "",
             "cta_url": ""
         },
@@ -1858,6 +1863,11 @@ def get_default_section_content(section_type: str) -> dict:
             "features": [],
             "why_it_matters": "",
             "specs": "",
+            "cta_count": 1,
+            "ctas": [
+                {"text": "", "url": ""}
+            ],
+            # Keep legacy fields for backward compatibility
             "cta_text": "",
             "cta_url": ""
         },
@@ -2317,8 +2327,22 @@ def render_product_section(content: dict, brand_config: dict, version: str, bg_c
     viewport = content.get('viewport_detail', '')
     why = content.get('why_it_matters', '')
     specs = content.get('specs', '')
-    cta_text = content.get('cta_text', 'Learn More')
-    cta_url = content.get('cta_url', '#')
+    
+    # Handle both new multi-CTA format and legacy single CTA format
+    cta_count = content.get('cta_count', 1)
+    ctas = content.get('ctas', [])
+    
+    # Migration: If ctas is empty but legacy fields exist, convert them
+    if not ctas and (content.get('cta_text') or content.get('cta_url')):
+        ctas = [{
+            'text': content.get('cta_text', 'Learn More'),
+            'url': content.get('cta_url', '#')
+        }]
+        cta_count = 1
+    
+    # Ensure we have at least one CTA if count is set
+    if cta_count > 0 and not ctas:
+        ctas = [{'text': 'Learn More', 'url': '#'}]
     
     # Build features HTML
     features_html = ""
@@ -2366,6 +2390,70 @@ def render_product_section(content: dict, brand_config: dict, version: str, bg_c
                             </h2>
         """
     
+    # Build CTA buttons HTML
+    cta_buttons_html = ""
+    if ctas:
+        if len(ctas) == 1:
+            # Single CTA - centered
+            cta = ctas[0]
+            cta_buttons_html = f"""
+                            <!-- CTA BUTTON -->
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding-top: 25px;">
+                                        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                            <tr>
+                                                <td style="background-color: {colors['accent']}; border-radius: 4px;">
+                                                    <a href="{cta.get('url', '#')}" style="display: inline-block; padding: 14px 28px; font-size: 16px; font-weight: bold; color: {colors['primary']}; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">
+                                                        {cta.get('text', 'Learn More')}
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+            """
+        else:
+            # Multiple CTAs - side by side
+            cta_cells = ""
+            cta_spacing = "10px" if len(ctas) == 2 else "5px"
+            for i, cta in enumerate(ctas):
+                spacing_style = ""
+                if i > 0:
+                    spacing_style = f"padding-left: {cta_spacing};"
+                if i < len(ctas) - 1:
+                    spacing_style += f" padding-right: {cta_spacing};"
+                
+                cta_cells += f"""
+                                                <td style="{spacing_style}">
+                                                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                                        <tr>
+                                                            <td style="background-color: {colors['accent']}; border-radius: 4px;">
+                                                                <a href="{cta.get('url', '#')}" style="display: inline-block; padding: 12px 20px; font-size: 14px; font-weight: bold; color: {colors['primary']}; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">
+                                                                    {cta.get('text', 'Learn More')}
+                                                                </a>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                """
+            
+            cta_buttons_html = f"""
+                            <!-- MULTIPLE CTA BUTTONS -->
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding-top: 25px;">
+                                        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                            <tr>
+                                                {cta_cells}
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+            """
+    
     return f"""
                     <!-- PRODUCT SECTION -->
                     <tr>
@@ -2402,22 +2490,7 @@ def render_product_section(content: dict, brand_config: dict, version: str, bg_c
                             
                             <p style="margin: 0 0 15px 0; font-size: 14px; line-height: 1.6; color: {colors["specs_text"]}; font-style: italic;">{specs}</p>
                             
-                            <!-- CTA BUTTON -->
-                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-                                <tr>
-                                    <td align="center" style="padding-top: 25px;">
-                                        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                                            <tr>
-                                                <td style="background-color: {colors['accent']}; border-radius: 4px;">
-                                                    <a href="{cta_url}" style="display: inline-block; padding: 14px 28px; font-size: 16px; font-weight: bold; color: {colors['primary']}; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">
-                                                        {cta_text}
-                                                    </a>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
+                            {cta_buttons_html}
                         </td>
                     </tr>
     """
