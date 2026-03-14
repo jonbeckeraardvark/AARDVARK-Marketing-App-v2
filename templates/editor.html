@@ -1875,14 +1875,30 @@
             const title = document.getElementById('ai-field-title')?.value || '';
             const intro = document.getElementById('ai-field-intro')?.value || '';
             const keyPrinciple = document.getElementById('ai-field-key-principle')?.value || '';
-            
+
+            // Gather subsections from the AI modal
+            const subsectionEls = document.querySelectorAll('#ai-field-subsections .ai-subsection');
+            const subsections = [];
+            subsectionEls.forEach(el => {
+                const heading = el.querySelector('.ai-subsection-heading')?.value || '';
+                const items = [];
+                el.querySelectorAll('.ai-subsection-item').forEach(itemEl => {
+                    if (itemEl.value.trim()) items.push(itemEl.value.trim());
+                });
+                if (heading || items.length > 0) {
+                    subsections.push({ heading, items });
+                }
+            });
+
             const titleField = editor.querySelector('[name="title"]');
             const introField = editor.querySelector('[name="intro"]');
             const keyPrincipleField = editor.querySelector('[name="key_principle"]');
-            
+            const subsectionsField = editor.querySelector('[name="subsections"]');
+
             if (titleField) titleField.value = title;
             if (introField) introField.value = intro;
             if (keyPrincipleField) keyPrincipleField.value = keyPrinciple;
+            if (subsectionsField) subsectionsField.value = JSON.stringify(subsections, null, 2);
         }
         
         function applyEventContent(editor) {

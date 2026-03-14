@@ -11,6 +11,8 @@ services:
         generateValue: true
       - key: DB_PATH
         value: "/var/data/newsletters.db"
+      - key: ANTHROPIC_API_KEY
+        sync: false
     disk:
       name: newsletter-data
       mountPath: /var/data
