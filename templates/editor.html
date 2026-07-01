@@ -379,32 +379,44 @@
         // Build background color dropdown HTML
         function buildBgColorDropdown(currentValue) {
             const colors = brandConfig.colors || {};
-            let options = '<option value="">Default (auto)</option>';
-            options += '<option value="#ffffff"' + (currentValue === '#ffffff' ? ' selected' : '') + '>White (#ffffff)</option>';
-
+            const allColors = [
+                { value: '', hex: '', label: 'Default (auto)' },
+                { value: '#ffffff', hex: '#ffffff', label: 'White' }
+            ];
             for (const [key, hex] of Object.entries(colors)) {
                 if (typeof hex === 'string' && hex.startsWith('#')) {
                     const displayName = colorDisplayNames[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                    const selected = currentValue === hex || currentValue === key ? ' selected' : '';
-                    options += `<option value="${hex}"${selected}>${displayName} (${hex})</option>`;
+                    allColors.push({ value: hex, hex: hex, label: displayName });
                 }
             }
 
-            const previewColor = currentValue || 'transparent';
-            const previewBorder = currentValue ? '1px solid #ccc' : '1px dashed #ccc';
+            let swatchesHtml = '';
+            allColors.forEach(c => {
+                const isSelected = (currentValue === c.value) || (!currentValue && !c.value);
+                const ring = isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : '';
+                const bg = c.hex ? `background-color: ${c.hex};` : 'background: repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50%/12px 12px;';
+                const border = c.hex ? `border: 1px solid ${c.hex === '#ffffff' ? '#ccc' : c.hex};` : 'border: 1px dashed #aaa;';
+                swatchesHtml += `<button type="button" class="bg-color-swatch ${ring}" title="${c.label}${c.hex ? ' (' + c.hex + ')' : ''}" data-color="${c.value}" style="width: 32px; height: 32px; border-radius: 6px; ${border} ${bg} cursor: pointer; flex-shrink: 0;" onclick="selectBgColor(this)"></button>`;
+            });
 
             return `
                 <div class="border-t pt-4 mt-4">
                     <label class="block text-sm font-medium text-gray-700 mb-1">Background Color Override</label>
-                    <div class="flex items-center gap-3">
-                        <div class="bg-color-preview" style="width: 36px; height: 36px; border-radius: 6px; border: ${previewBorder}; background-color: ${previewColor}; flex-shrink: 0;"></div>
-                        <select name="bg_color_override" class="flex-1 border rounded-lg px-3 py-2" onchange="this.previousElementSibling.style.backgroundColor = this.value || 'transparent'; this.previousElementSibling.style.border = this.value ? '1px solid #ccc' : '1px dashed #ccc';">
-                            ${options}
-                        </select>
-                    </div>
-                    <p class="text-xs text-gray-400 mt-1">Leave as "Default" to use the standard color for this section type</p>
+                    <div class="flex flex-wrap gap-2 mb-2">${swatchesHtml}</div>
+                    <input type="hidden" name="bg_color_override" value="${currentValue || ''}">
+                    <p class="text-xs text-gray-500 mt-1" id="bg-color-label">${currentValue ? allColors.find(c => c.value === currentValue)?.label || currentValue : 'Default (auto)'}</p>
                 </div>
             `;
+        }
+
+        function selectBgColor(btn) {
+            const container = btn.closest('.border-t');
+            container.querySelectorAll('.bg-color-swatch').forEach(s => {
+                s.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-1');
+            });
+            btn.classList.add('ring-2', 'ring-blue-500', 'ring-offset-1');
+            container.querySelector('[name="bg_color_override"]').value = btn.dataset.color;
+            container.querySelector('#bg-color-label, p.text-xs').textContent = btn.title;
         }
         
         // Build formatting toolbar HTML
@@ -2176,12 +2188,20 @@
             const titleField = editor.querySelector('[name="title"]');
             const introField = editor.querySelector('[name="intro"]');
             const keyPrincipleField = editor.querySelector('[name="key_principle"]');
-            const subsectionsField = editor.querySelector('[name="subsections"]');
 
             if (titleField) titleField.value = title;
             if (introField) introField.value = intro;
             if (keyPrincipleField) keyPrincipleField.value = keyPrinciple;
-            if (subsectionsField) subsectionsField.value = JSON.stringify(subsections, null, 2);
+
+            // Update section data and re-render the subsection editor
+            const section = sectionsData.find(s => s.id === currentSectionId);
+            if (section) {
+                section.content.subsections = subsections;
+                section.content.title = title;
+                section.content.intro = intro;
+                section.content.key_principle = keyPrinciple;
+                selectSection(currentSectionId);
+            }
         }
         
         function applyEventContent(editor) {
