@@ -1446,60 +1446,58 @@
             document.getElementById('export-modal').classList.remove('flex');
         }
         
+        async function getExportError(response) {
+            if (response.status === 401) return 'Session expired. Please refresh the page and log in again.';
+            try {
+                const data = await response.json();
+                return data.error || data.detail || `Server error (${response.status})`;
+            } catch {
+                return `Server error (${response.status}). Check Render logs for details.`;
+            }
+        }
+
         async function doExport() {
             const version = document.querySelector('input[name="export-version"]:checked').value;
-            
+
             try {
                 if (version === 'both') {
-                    // Download both email and website versions
                     const emailResponse = await fetch(`/api/newsletters/${newsletterId}/export/email`);
                     const websiteResponse = await fetch(`/api/newsletters/${newsletterId}/export/website`);
-                    
-                    if (emailResponse.ok && websiteResponse.ok) {
-                        // Download email version
-                        await downloadFile(emailResponse, 'email');
-                        // Small delay between downloads
-                        setTimeout(async () => {
-                            await downloadFile(websiteResponse, 'website');
-                        }, 100);
-                        
-                        // Show success message
-                        document.getElementById('export-result').classList.remove('hidden');
-                        document.getElementById('export-path').textContent = `Downloaded: Email and Website versions`;
-                        
-                        // Close modal after short delay
-                        setTimeout(() => {
-                            closeExportModal();
-                        }, 2000);
-                    } else {
-                        throw new Error('Export failed');
+
+                    if (!emailResponse.ok) {
+                        throw new Error(await getExportError(emailResponse));
                     }
+                    if (!websiteResponse.ok) {
+                        throw new Error(await getExportError(websiteResponse));
+                    }
+
+                    await downloadFile(emailResponse, 'email');
+                    setTimeout(async () => {
+                        await downloadFile(websiteResponse, 'website');
+                    }, 100);
+
+                    document.getElementById('export-result').classList.remove('hidden');
+                    document.getElementById('export-path').textContent = `Downloaded: Email and Website versions`;
+                    setTimeout(() => { closeExportModal(); }, 2000);
                 } else {
-                    // Single version export
                     const response = await fetch(`/api/newsletters/${newsletterId}/export`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({version})
                     });
-                    
-                    if (response.ok) {
-                        await downloadFile(response, version);
-                        
-                        // Show success message
-                        document.getElementById('export-result').classList.remove('hidden');
-                        document.getElementById('export-path').textContent = `Downloaded: ${version.charAt(0).toUpperCase() + version.slice(1)} version`;
-                        
-                        // Close modal after short delay
-                        setTimeout(() => {
-                            closeExportModal();
-                        }, 2000);
-                    } else {
-                        throw new Error('Export failed');
+
+                    if (!response.ok) {
+                        throw new Error(await getExportError(response));
                     }
+
+                    await downloadFile(response, version);
+                    document.getElementById('export-result').classList.remove('hidden');
+                    document.getElementById('export-path').textContent = `Downloaded: ${version.charAt(0).toUpperCase() + version.slice(1)} version`;
+                    setTimeout(() => { closeExportModal(); }, 2000);
                 }
             } catch (error) {
-                console.error('Error:', error);
-                alert('Error exporting newsletter');
+                console.error('Export error:', error);
+                alert('Export error: ' + error.message);
             }
         }
         
