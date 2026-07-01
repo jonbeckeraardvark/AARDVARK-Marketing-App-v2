@@ -338,7 +338,12 @@
         const sectionTypes = {{ section_types | tojson | safe }};
         const brandConfig = {{ brand_config | tojson | safe }};
         const newsletterId = {{ newsletter.id }};
-        
+        const newsletterMeta = {
+            title: {{ newsletter.title | tojson | safe }},
+            month: {{ newsletter.month | tojson | safe }},
+            year: String({{ newsletter.year }})
+        };
+
         let currentSectionId = null;
         let currentSectionType = null;
         
@@ -375,23 +380,28 @@
         function buildBgColorDropdown(currentValue) {
             const colors = brandConfig.colors || {};
             let options = '<option value="">Default (auto)</option>';
-            options += '<option value="#ffffff"' + (currentValue === '#ffffff' ? ' selected' : '') + '>⬜ White (#ffffff)</option>';
-            
-            // Add brand colors
+            options += '<option value="#ffffff"' + (currentValue === '#ffffff' ? ' selected' : '') + '>White (#ffffff)</option>';
+
             for (const [key, hex] of Object.entries(colors)) {
                 if (typeof hex === 'string' && hex.startsWith('#')) {
                     const displayName = colorDisplayNames[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
                     const selected = currentValue === hex || currentValue === key ? ' selected' : '';
-                    options += `<option value="${hex}"${selected}>⬛ ${displayName} (${hex})</option>`;
+                    options += `<option value="${hex}"${selected}>${displayName} (${hex})</option>`;
                 }
             }
-            
+
+            const previewColor = currentValue || 'transparent';
+            const previewBorder = currentValue ? '1px solid #ccc' : '1px dashed #ccc';
+
             return `
                 <div class="border-t pt-4 mt-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">🎨 Background Color Override</label>
-                    <select name="bg_color_override" class="w-full border rounded-lg px-3 py-2">
-                        ${options}
-                    </select>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Background Color Override</label>
+                    <div class="flex items-center gap-3">
+                        <div class="bg-color-preview" style="width: 36px; height: 36px; border-radius: 6px; border: ${previewBorder}; background-color: ${previewColor}; flex-shrink: 0;"></div>
+                        <select name="bg_color_override" class="flex-1 border rounded-lg px-3 py-2" onchange="this.previousElementSibling.style.backgroundColor = this.value || 'transparent'; this.previousElementSibling.style.border = this.value ? '1px solid #ccc' : '1px dashed #ccc';">
+                            ${options}
+                        </select>
+                    </div>
                     <p class="text-xs text-gray-400 mt-1">Leave as "Default" to use the standard color for this section type</p>
                 </div>
             `;
@@ -481,18 +491,18 @@
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Newsletter Name</label>
-                                <input type="text" name="newsletter_name" value="${content.newsletter_name || brandConfig.newsletter_name || ''}" 
-                                       class="w-full border rounded-lg px-3 py-2" placeholder="Field Notes">
+                                <input type="text" name="newsletter_name" value="${content.newsletter_name || newsletterMeta.title || brandConfig.newsletter_name || ''}"
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="Newsletter Name">
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Month</label>
-                                    <input type="text" name="month" value="${content.month || ''}" 
+                                    <input type="text" name="month" value="${content.month || newsletterMeta.month || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="December">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                                    <input type="text" name="year" value="${content.year || ''}" 
+                                    <input type="text" name="year" value="${content.year || newsletterMeta.year || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="2025">
                                 </div>
                             </div>
@@ -699,6 +709,33 @@
                     break;
 
                 case 'howto':
+                    const subsections = content.subsections || [];
+                    let subsectionsHtml = '';
+                    for (let si = 0; si < Math.max(subsections.length, 1); si++) {
+                        const sub = subsections[si] || {heading: '', items: []};
+                        const itemsText = (sub.items || []).join('\n');
+                        subsectionsHtml += `
+                            <div class="subsection-item border border-gray-200 rounded-lg p-4 ${si > 0 ? 'mt-3' : ''}">
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="font-medium text-gray-700">Subsection ${si + 1}</span>
+                                    ${si > 0 ? `<button type="button" onclick="removeSubsection(${si})" class="text-red-500 hover:text-red-700 text-sm">Remove</button>` : ''}
+                                </div>
+                                <div class="space-y-2">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-600 mb-1">Heading</label>
+                                        <input type="text" name="sub_heading_${si}" value="${sub.heading || ''}"
+                                               class="w-full border rounded-lg px-3 py-2" placeholder="e.g. For Vehicle Staging">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-600 mb-1">Items (one per line)</label>
+                                        <textarea name="sub_items_${si}" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm"
+                                                  placeholder="Point 1\nPoint 2\nPoint 3">${itemsText}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+
                     html = `
                         <div class="space-y-4">
                             <div>
@@ -726,10 +763,11 @@
                                           placeholder="Brief intro to the topic...">${content.intro || ''}</textarea>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Subsections (JSON format for now)</label>
-                                <textarea name="subsections" rows="8" class="w-full border rounded-lg px-3 py-2 font-mono text-sm"
-                                          placeholder='[{"heading": "For Vehicle Staging", "items": ["Point 1", "Point 2"]}]'>${JSON.stringify(content.subsections || [], null, 2)}</textarea>
-                                <p class="text-xs text-gray-400 mt-1">Each subsection has a "heading" and "items" array</p>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Subsections</label>
+                                <div id="subsections-container">
+                                    ${subsectionsHtml}
+                                </div>
+                                <button type="button" onclick="addSubsection()" class="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium">+ Add Subsection</button>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Key Principle (italic)</label>
@@ -845,6 +883,12 @@
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Article Title</label>
                                 <input type="text" name="title" value="${content.title || ''}"
                                        class="w-full border rounded-lg px-3 py-2" placeholder="Article headline...">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Author (optional)</label>
+                                <input type="text" name="author" value="${content.author || ''}"
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="Author name">
+                                <p class="text-xs text-gray-400 mt-1">Displayed below article title in italic</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Summary</label>
@@ -1222,6 +1266,41 @@
             eventCountInput.value = newCount;
         }
         
+        function addSubsection() {
+            const container = document.getElementById('subsections-container');
+            const count = container.querySelectorAll('.subsection-item').length;
+            const div = document.createElement('div');
+            div.className = 'subsection-item border border-gray-200 rounded-lg p-4 mt-3';
+            div.innerHTML = `
+                <div class="flex justify-between items-center mb-2">
+                    <span class="font-medium text-gray-700">Subsection ${count + 1}</span>
+                    <button type="button" onclick="removeSubsection(${count})" class="text-red-500 hover:text-red-700 text-sm">Remove</button>
+                </div>
+                <div class="space-y-2">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Heading</label>
+                        <input type="text" name="sub_heading_${count}" value=""
+                               class="w-full border rounded-lg px-3 py-2" placeholder="e.g. For Vehicle Staging">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Items (one per line)</label>
+                        <textarea name="sub_items_${count}" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm"
+                                  placeholder="Point 1\nPoint 2\nPoint 3"></textarea>
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+        }
+
+        function removeSubsection(index) {
+            saveCurrentSection();
+            const section = sectionsData.find(s => s.id === currentSectionId);
+            if (section && section.content.subsections) {
+                section.content.subsections.splice(index, 1);
+                selectSection(currentSectionId);
+            }
+        }
+
         // Save current section
         async function saveCurrentSection() {
             if (!currentSectionId) {
@@ -1291,24 +1370,32 @@
                 }
             }
             
-            // Special handling for subsections (JSON)
+            // Special handling for subsections (visual editor)
             if (currentSectionType === 'howto') {
-                const subsectionsInput = editor.querySelector('[name="subsections"]');
-                try {
-                    content.subsections = JSON.parse(subsectionsInput.value || '[]');
-                } catch (e) {
-                    alert('Invalid JSON in subsections field');
-                    return;
+                content.subsections = [];
+                let si = 0;
+                while (true) {
+                    const headingInput = editor.querySelector(`[name="sub_heading_${si}"]`);
+                    if (!headingInput) break;
+                    const itemsInput = editor.querySelector(`[name="sub_items_${si}"]`);
+                    const heading = headingInput.value.trim();
+                    const itemsText = itemsInput ? itemsInput.value.trim() : '';
+                    const items = itemsText ? itemsText.split('\n').map(s => s.trim()).filter(s => s) : [];
+                    if (heading || items.length) {
+                        content.subsections.push({ heading, items });
+                    }
+                    si++;
                 }
             }
             
             inputs.forEach(input => {
                 const name = input.name;
                 // Skip special fields that are handled above
-                if (name && !name.startsWith('feature_') && !name.startsWith('event_name_') && 
-                    !name.startsWith('event_dates_') && !name.startsWith('event_location_') && 
-                    !name.startsWith('event_description_') && !name.startsWith('cta_text_') && 
-                    !name.startsWith('cta_url_') && name !== 'subsections' && name !== 'event_count' && 
+                if (name && !name.startsWith('feature_') && !name.startsWith('event_name_') &&
+                    !name.startsWith('event_dates_') && !name.startsWith('event_location_') &&
+                    !name.startsWith('event_description_') && !name.startsWith('cta_text_') &&
+                    !name.startsWith('cta_url_') && !name.startsWith('sub_heading_') &&
+                    !name.startsWith('sub_items_') && name !== 'subsections' && name !== 'event_count' &&
                     name !== 'cta_count') {
                     content[name] = input.value;
                 }

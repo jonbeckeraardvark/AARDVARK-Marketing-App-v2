@@ -403,7 +403,7 @@ PROJECT7_CONFIG = {
     "icon_url": "",  # P7 angular icon if needed
     "website_url": "https://www.project7armor.com",
     "contact_url": "https://www.project7armor.com/pages/contact-us-helpdesk",
-    "newsletter_name": "Field Notes",
+    "newsletter_name": "P7 News",
     "tagline": "PROJECT7 builds tactical equipment based on operator feedback. We solve specific problems, not everything.",
     "signature": "—The PROJECT7 Team"
 }
@@ -444,7 +444,7 @@ AARDVARK_CONFIG = {
     "use_icon_header": True,  # Use Delta A icon in header instead of full logo
     "website_url": "https://www.aardvarktactical.com",
     "contact_url": "https://www.aardvarktactical.com/contactus",
-    "newsletter_name": "AARD Report",
+    "newsletter_name": "AARDVARK Report",
     "tagline": "AARDVARK finds, develops, and manufactures purpose-built products that enhance tactical operator safety.",
     "signature": "—The AARDVARK Team"
 }
@@ -769,14 +769,18 @@ async def create_newsletter(
         # Create default sections
         for i, section in enumerate(SECTION_TYPES):
             default_content = get_default_section_content(section['type'])
+            if section['type'] == 'title':
+                default_content['newsletter_name'] = title
+                default_content['month'] = month
+                default_content['year'] = str(year)
             cursor.execute("""
                 INSERT INTO sections (newsletter_id, section_type, section_order, enabled, content)
                 VALUES (?, ?, ?, ?, ?)
             """, (newsletter_id, section['type'], i, 1 if section['required'] else 0, json.dumps(default_content)))
-        
+
         conn.commit()
         conn.close()
-        
+
         return JSONResponse({"success": True, "newsletter_id": newsletter_id})
     except Exception as e:
         # Database failed - use file-based fallback
@@ -799,6 +803,10 @@ async def create_newsletter(
         # Create sections
         for i, section in enumerate(SECTION_TYPES):
             default_content = get_default_section_content(section['type'])
+            if section['type'] == 'title':
+                default_content['newsletter_name'] = title
+                default_content['month'] = month
+                default_content['year'] = str(year)
             newsletter_data["sections"].append({
                 "id": i + 1,
                 "section_type": section['type'],
@@ -847,6 +855,10 @@ async def create_newsletter_form(request: Request):
         # Create default sections for the newsletter
         for i, section in enumerate(SECTION_TYPES):
             default_content = get_default_section_content(section['type'])
+            if section['type'] == 'title':
+                default_content['newsletter_name'] = title
+                default_content['month'] = month
+                default_content['year'] = str(year)
             cursor.execute("""
                 INSERT INTO sections (newsletter_id, section_type, section_order, enabled, content)
                 VALUES (?, ?, ?, ?, ?)
@@ -1589,7 +1601,7 @@ async def generate_with_claude(prompt: str, system_prompt: str = "") -> str:
                     "content-type": "application/json"
                 },
                 json={
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-5",
                     "max_tokens": 2000,
                     "system": system_prompt,
                     "messages": [
@@ -1995,6 +2007,7 @@ def get_default_section_content(section_type: str) -> dict:
         },
         "article": {
             "title": "",
+            "author": "",
             "summary": "",
             "image_url": "",
             "image_alt": "",
@@ -2136,6 +2149,15 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
             width_val = 100
         img_style = f"display: block; height: auto; border-radius: 4px; width: {width_val}%; max-width: {width_val}%;"
         align = "center" if width_val < 100 else "left"
+        caption_html = ""
+        if image_alt:
+            caption_html = f"""
+                                <tr>
+                                    <td style="padding: 4px 0 10px 0; font-size: 12px; color: #999999; font-style: italic;" align="{align}">
+                                        {image_alt}
+                                    </td>
+                                </tr>
+            """
         return f"""
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                                 <tr>
@@ -2143,6 +2165,7 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                                         <img src="{image_url}" alt="{image_alt}" style="{img_style}">
                                     </td>
                                 </tr>
+                                {caption_html}
                             </table>
         """
     
@@ -2463,6 +2486,7 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
 
     elif section_type == "article":
         title = content.get('title', '')
+        author = content.get('author', '')
         summary = content.get('summary', '')
         body = content.get('content', '')
         source_name = content.get('source_name', '')
@@ -2509,6 +2533,16 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                         </table>
             """
 
+        author_html = ""
+        if author:
+            author_html = f"""
+                        <p style="margin: 0 0 15px 0; font-size: 14px; color: {colors['specs_text']}; font-style: italic;">
+                            By {author}
+                        </p>
+            """
+        else:
+            author_html = '<div style="margin-bottom: 10px;"></div>'
+
         read_more_html = ""
         read_more_url = content.get('read_more_url', '')
         if read_more_url and version == 'email':
@@ -2523,9 +2557,10 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                     <tr>
                         <td style="background-color: {bg_color}; padding: 30px 40px;">
                             {image_html}
-                            <h2 style="margin: 0 0 15px 0; font-size: 22px; font-weight: bold; color: {colors['primary']};">
+                            <h2 style="margin: 0 0 5px 0; font-size: 22px; font-weight: bold; color: {colors['primary']};">
                                 {title}
                             </h2>
+                            {author_html}
                             <p style="margin: 0 0 15px 0; font-size: 16px; line-height: 1.6; color: {colors['body_text']}; font-weight: 600;">
                                 {summary}
                             </p>
