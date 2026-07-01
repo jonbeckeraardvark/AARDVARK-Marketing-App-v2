@@ -403,7 +403,7 @@ PROJECT7_CONFIG = {
     "icon_url": "",  # P7 angular icon if needed
     "website_url": "https://www.project7armor.com",
     "contact_url": "https://www.project7armor.com/pages/contact-us-helpdesk",
-    "newsletter_name": "Field Notes",
+    "newsletter_name": "P7 News",
     "tagline": "PROJECT7 builds tactical equipment based on operator feedback. We solve specific problems, not everything.",
     "signature": "—The PROJECT7 Team"
 }
@@ -444,7 +444,7 @@ AARDVARK_CONFIG = {
     "use_icon_header": True,  # Use Delta A icon in header instead of full logo
     "website_url": "https://www.aardvarktactical.com",
     "contact_url": "https://www.aardvarktactical.com/contactus",
-    "newsletter_name": "AARD Report",
+    "newsletter_name": "AARDVARK Report",
     "tagline": "AARDVARK finds, develops, and manufactures purpose-built products that enhance tactical operator safety.",
     "signature": "—The AARDVARK Team"
 }
@@ -769,14 +769,18 @@ async def create_newsletter(
         # Create default sections
         for i, section in enumerate(SECTION_TYPES):
             default_content = get_default_section_content(section['type'])
+            if section['type'] == 'title':
+                default_content['newsletter_name'] = title
+                default_content['month'] = month
+                default_content['year'] = str(year)
             cursor.execute("""
                 INSERT INTO sections (newsletter_id, section_type, section_order, enabled, content)
                 VALUES (?, ?, ?, ?, ?)
             """, (newsletter_id, section['type'], i, 1 if section['required'] else 0, json.dumps(default_content)))
-        
+
         conn.commit()
         conn.close()
-        
+
         return JSONResponse({"success": True, "newsletter_id": newsletter_id})
     except Exception as e:
         # Database failed - use file-based fallback
@@ -799,6 +803,10 @@ async def create_newsletter(
         # Create sections
         for i, section in enumerate(SECTION_TYPES):
             default_content = get_default_section_content(section['type'])
+            if section['type'] == 'title':
+                default_content['newsletter_name'] = title
+                default_content['month'] = month
+                default_content['year'] = str(year)
             newsletter_data["sections"].append({
                 "id": i + 1,
                 "section_type": section['type'],
@@ -847,6 +855,10 @@ async def create_newsletter_form(request: Request):
         # Create default sections for the newsletter
         for i, section in enumerate(SECTION_TYPES):
             default_content = get_default_section_content(section['type'])
+            if section['type'] == 'title':
+                default_content['newsletter_name'] = title
+                default_content['month'] = month
+                default_content['year'] = str(year)
             cursor.execute("""
                 INSERT INTO sections (newsletter_id, section_type, section_order, enabled, content)
                 VALUES (?, ?, ?, ?, ?)
@@ -1589,7 +1601,7 @@ async def generate_with_claude(prompt: str, system_prompt: str = "") -> str:
                     "content-type": "application/json"
                 },
                 json={
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-5",
                     "max_tokens": 2000,
                     "system": system_prompt,
                     "messages": [
@@ -1995,6 +2007,7 @@ def get_default_section_content(section_type: str) -> dict:
         },
         "article": {
             "title": "",
+            "author": "",
             "summary": "",
             "image_url": "",
             "image_alt": "",
@@ -2064,11 +2077,16 @@ def generate_newsletter_html(newsletter, sections, brand_config: dict, version: 
         # Skip footer section for website version
         if version == "website" and section['section_type'] == 'footer':
             continue
-            
-        content = json.loads(section['content'])
-        section_html = render_section(section['section_type'], content, brand_config, version)
-        if section_html:
-            sections_html.append(section_html)
+
+        try:
+            content = json.loads(section['content'])
+            section_html = render_section(section['section_type'], content, brand_config, version)
+            if section_html:
+                sections_html.append(section_html)
+        except Exception as e:
+            print(f"[EXPORT ERROR] Section {section['section_type']} (id={section['id']}): {e}")
+            import traceback
+            traceback.print_exc()
     
     # Complete HTML template
     html = f"""<!DOCTYPE html>
@@ -2125,9 +2143,21 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
     def get_image_html(image_url: str = '', image_alt: str = '', padding: str = '0 0 20px 0', width: str = '100') -> str:
         if not image_url:
             return ""
-        width_val = int(width) if width else 100
+        try:
+            width_val = int(width) if width else 100
+        except (ValueError, TypeError):
+            width_val = 100
         img_style = f"display: block; height: auto; border-radius: 4px; width: {width_val}%; max-width: {width_val}%;"
         align = "center" if width_val < 100 else "left"
+        caption_html = ""
+        if image_alt:
+            caption_html = f"""
+                                <tr>
+                                    <td style="padding: 4px 0 10px 0; font-size: 12px; color: #999999; font-style: italic;" align="{align}">
+                                        {image_alt}
+                                    </td>
+                                </tr>
+            """
         return f"""
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                                 <tr>
@@ -2135,6 +2165,7 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                                         <img src="{image_url}" alt="{image_alt}" style="{img_style}">
                                     </td>
                                 </tr>
+                                {caption_html}
                             </table>
         """
     
@@ -2289,6 +2320,14 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
         key_principle = content.get('key_principle', '')
         if not title:
             return ""
+
+        if isinstance(subsections, str):
+            try:
+                subsections = json.loads(subsections)
+            except (json.JSONDecodeError, TypeError):
+                subsections = []
+        if not isinstance(subsections, list):
+            subsections = []
 
         subsections_html = ""
         for sub in subsections:
@@ -2447,6 +2486,7 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
 
     elif section_type == "article":
         title = content.get('title', '')
+        author = content.get('author', '')
         summary = content.get('summary', '')
         body = content.get('content', '')
         source_name = content.get('source_name', '')
@@ -2493,6 +2533,16 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                         </table>
             """
 
+        author_html = ""
+        if author:
+            author_html = f"""
+                        <p style="margin: 0 0 15px 0; font-size: 14px; color: {colors['specs_text']}; font-style: italic;">
+                            By {author}
+                        </p>
+            """
+        else:
+            author_html = '<div style="margin-bottom: 10px;"></div>'
+
         read_more_html = ""
         read_more_url = content.get('read_more_url', '')
         if read_more_url and version == 'email':
@@ -2507,9 +2557,10 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                     <tr>
                         <td style="background-color: {bg_color}; padding: 30px 40px;">
                             {image_html}
-                            <h2 style="margin: 0 0 15px 0; font-size: 22px; font-weight: bold; color: {colors['primary']};">
+                            <h2 style="margin: 0 0 5px 0; font-size: 22px; font-weight: bold; color: {colors['primary']};">
                                 {title}
                             </h2>
+                            {author_html}
                             <p style="margin: 0 0 15px 0; font-size: 16px; line-height: 1.6; color: {colors['body_text']}; font-weight: 600;">
                                 {summary}
                             </p>
@@ -2571,6 +2622,13 @@ def render_product_section(content: dict, brand_config: dict, version: str, bg_c
     problem = content.get('problem', '')
     solution = content.get('solution', '')
     features = content.get('features', [])
+    if isinstance(features, str):
+        try:
+            features = json.loads(features)
+        except (json.JSONDecodeError, TypeError):
+            features = []
+    if not isinstance(features, list):
+        features = []
     viewport = content.get('viewport_detail', '')
     why = content.get('why_it_matters', '')
     specs = content.get('specs', '')
@@ -2606,7 +2664,10 @@ def render_product_section(content: dict, brand_config: dict, version: str, bg_c
     image_width = content.get('image_width', '100')
     image_html = ""
     if image_url:
-        width_val = int(image_width) if image_width else 100
+        try:
+            width_val = int(image_width) if image_width else 100
+        except (ValueError, TypeError):
+            width_val = 100
         img_style = f"display: block; height: auto; border-radius: 4px; width: {width_val}%; max-width: {width_val}%;"
         align = "center" if width_val < 100 else "left"
         image_html = f"""
@@ -2992,6 +3053,48 @@ async def ensure_db_middleware(request: Request, call_next):
 async def health_check():
     """Health check endpoint for Render"""
     return {"status": "ok", "service": "newsletter-generator"}
+
+@app.get("/debug/export/{newsletter_id}")
+async def debug_export(newsletter_id: int):
+    """Debug export - shows errors instead of 500"""
+    import traceback as tb
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT n.*, b.config as brand_config, b.name as brand_slug
+            FROM newsletters n JOIN brands b ON n.brand_id = b.id WHERE n.id = ?
+        """, (newsletter_id,))
+        newsletter_row = cursor.fetchone()
+        if not newsletter_row:
+            return {"error": "Newsletter not found"}
+        newsletter = dict(newsletter_row)
+        cursor.execute("SELECT * FROM sections WHERE newsletter_id = ? AND enabled = 1 ORDER BY section_order", (newsletter_id,))
+        sections = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        brand_config = json.loads(newsletter['brand_config'])
+
+        errors = []
+        for section in sections:
+            try:
+                content = json.loads(section['content'])
+                render_section(section['section_type'], content, brand_config, 'email')
+            except Exception as e:
+                errors.append({
+                    "section_id": section['id'],
+                    "section_type": section['section_type'],
+                    "error": str(e),
+                    "traceback": tb.format_exc(),
+                    "content_preview": section['content'][:500]
+                })
+
+        if errors:
+            return {"status": "errors_found", "errors": errors}
+
+        html = generate_newsletter_html(newsletter, sections, brand_config, 'email')
+        return {"status": "ok", "html_length": len(html), "sections_count": len(sections)}
+    except Exception as e:
+        return {"status": "crash", "error": str(e), "traceback": tb.format_exc()}
 
 @app.get("/debug/db")
 async def debug_database():
