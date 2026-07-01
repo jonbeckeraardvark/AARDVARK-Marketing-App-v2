@@ -97,13 +97,21 @@
                                 <span class="text-xs text-gray-400 ml-2">○</span>
                                 {% endif %}
                             </div>
-                            <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                                <input type="checkbox" {% if section.enabled %}checked{% endif %} 
-                                       onchange="toggleSection({{ section.id }}, this.checked)"
-                                       class="sr-only peer"
-                                       {% for st in section_types %}{% if st.type == section.section_type and st.required %}disabled{% endif %}{% endfor %}>
-                                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
-                            </label>
+                            <div class="flex items-center space-x-1" onclick="event.stopPropagation()">
+                                <button onclick="moveSection({{ section.id }}, 'up')" class="text-gray-400 hover:text-gray-700 p-1" title="Move up">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+                                </button>
+                                <button onclick="moveSection({{ section.id }}, 'down')" class="text-gray-400 hover:text-gray-700 p-1" title="Move down">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+                                <label class="relative inline-flex items-center cursor-pointer ml-1">
+                                    <input type="checkbox" {% if section.enabled %}checked{% endif %}
+                                           onchange="toggleSection({{ section.id }}, this.checked)"
+                                           class="sr-only peer"
+                                           {% for st in section_types %}{% if st.type == section.section_type and st.required %}disabled{% endif %}{% endfor %}>
+                                    <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                                </label>
+                            </div>
                         </div>
                         {% endfor %}
                     </div>
@@ -389,6 +397,35 @@
             `;
         }
         
+        // Build formatting toolbar HTML
+        function buildFormattingToolbar(fieldName) {
+            return `
+                <div class="flex space-x-1 mb-1">
+                    <button type="button" onclick="insertFormatting('${fieldName}', 'b')"
+                            class="px-2 py-0.5 text-xs font-bold border rounded hover:bg-gray-100" title="Bold">B</button>
+                    <button type="button" onclick="insertFormatting('${fieldName}', 'i')"
+                            class="px-2 py-0.5 text-xs italic border rounded hover:bg-gray-100" title="Italic">I</button>
+                    <button type="button" onclick="insertFormatting('${fieldName}', 'p')"
+                            class="px-2 py-0.5 text-xs border rounded hover:bg-gray-100" title="New Paragraph">¶</button>
+                </div>
+            `;
+        }
+
+        // Build image width dropdown HTML
+        function buildImageWidthDropdown(currentValue) {
+            return `
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Image Size</label>
+                    <select name="image_width" class="w-full border rounded-lg px-3 py-2">
+                        <option value="100" ${(currentValue || '100') === '100' ? 'selected' : ''}>Full Width (100%)</option>
+                        <option value="75" ${currentValue === '75' ? 'selected' : ''}>Large (75%)</option>
+                        <option value="50" ${currentValue === '50' ? 'selected' : ''}>Medium (50%)</option>
+                        <option value="25" ${currentValue === '25' ? 'selected' : ''}>Small (25%)</option>
+                    </select>
+                </div>
+            `;
+        }
+
         // Parse section content
         sectionsData.forEach(s => {
             if (typeof s.content === 'string') {
@@ -469,27 +506,48 @@
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Opening Hook</label>
+                                ${buildFormattingToolbar('hook')}
                                 <textarea name="hook" rows="2" class="w-full border rounded-lg px-3 py-2"
                                           placeholder="Start with a problem or compelling statement...">${content.hook || ''}</textarea>
                                 <p class="text-xs text-gray-400 mt-1">Bold, attention-grabbing first line</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Overview</label>
+                                ${buildFormattingToolbar('overview')}
                                 <textarea name="overview" rows="3" class="w-full border rounded-lg px-3 py-2"
                                           placeholder="What's in this issue...">${content.overview || ''}</textarea>
                                 <p class="text-xs text-gray-400 mt-1">Brief preview of what's covered</p>
                             </div>
-                            <div class="grid grid-cols-2 gap-4">
+                            <div class="grid grid-cols-3 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
-                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                    <input type="url" name="image_url" value="${content.image_url || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
-                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
                                 </div>
+                                ${buildImageWidthDropdown(content.image_width)}
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">CTA Button Text (optional)</label>
+                                    <input type="text" name="cta_text" value="${content.cta_text || ''}"
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Learn More">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">CTA Button URL</label>
+                                    <input type="url" name="cta_url" value="${content.cta_url || ''}"
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Read More URL (email version only)</label>
+                                <input type="url" name="read_more_url" value="${content.read_more_url || ''}"
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="https://... (link to full content)">
+                                <p class="text-xs text-gray-400 mt-1">If set, email version shows "Read More" link to full content</p>
                             </div>
                             ${buildBgColorDropdown(content.bg_color_override || '')}
                         </div>
@@ -522,25 +580,28 @@
                                 <input type="text" name="tagline" value="${content.tagline || ''}" 
                                        class="w-full border rounded-lg px-3 py-2" placeholder="One-line benefit or description">
                             </div>
-                            <div class="grid grid-cols-2 gap-4">
+                            <div class="grid grid-cols-3 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
-                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                    <input type="url" name="image_url" value="${content.image_url || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
-                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
                                 </div>
+                                ${buildImageWidthDropdown(content.image_width)}
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Problem Statement</label>
+                                ${buildFormattingToolbar('problem')}
                                 <textarea name="problem" rows="3" class="w-full border rounded-lg px-3 py-2"
                                           placeholder="What challenge do operators face?">${content.problem || ''}</textarea>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Solution</label>
+                                ${buildFormattingToolbar('solution')}
                                 <textarea name="solution" rows="3" class="w-full border rounded-lg px-3 py-2"
                                           placeholder="How does this product solve it?">${content.solution || ''}</textarea>
                             </div>
@@ -578,11 +639,17 @@
                                     </div>
                                 </div>
                             </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Read More URL (email version only)</label>
+                                <input type="url" name="read_more_url" value="${content.read_more_url || ''}"
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="https://... (link to full content)">
+                                <p class="text-xs text-gray-400 mt-1">If set, email version shows "Read More" link to full content</p>
+                            </div>
                             ${buildBgColorDropdown(content.bg_color_override || '')}
                         </div>
                     `;
                     break;
-                    
+
                 case 'details':
                     html = `
                         <div class="space-y-4">
@@ -596,55 +663,65 @@
                                 <input type="text" name="subtitle" value="${content.subtitle || ''}" 
                                        class="w-full border rounded-lg px-3 py-2" placeholder="Why we run two separate channels...">
                             </div>
-                            <div class="grid grid-cols-2 gap-4">
+                            <div class="grid grid-cols-3 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
-                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                    <input type="url" name="image_url" value="${content.image_url || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
-                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
                                 </div>
+                                ${buildImageWidthDropdown(content.image_width)}
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                                ${buildFormattingToolbar('content')}
                                 <textarea name="content" rows="6" class="w-full border rounded-lg px-3 py-2"
                                           placeholder="Explain the technical detail...">${content.content || ''}</textarea>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Closing Statement (italic)</label>
-                                <input type="text" name="closing" value="${content.closing || ''}" 
+                                <input type="text" name="closing" value="${content.closing || ''}"
                                        class="w-full border rounded-lg px-3 py-2" placeholder="Small detail. Big difference when...">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Read More URL (email version only)</label>
+                                <input type="url" name="read_more_url" value="${content.read_more_url || ''}"
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="https://... (link to full content)">
+                                <p class="text-xs text-gray-400 mt-1">If set, email version shows "Read More" link to full content</p>
                             </div>
                             ${buildBgColorDropdown(content.bg_color_override || '')}
                         </div>
                     `;
                     break;
-                    
+
                 case 'howto':
                     html = `
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Topic Title</label>
-                                <input type="text" name="title" value="${content.title || ''}" 
+                                <input type="text" name="title" value="${content.title || ''}"
                                        class="w-full border rounded-lg px-3 py-2" placeholder="Shield Deployment Considerations">
                             </div>
-                            <div class="grid grid-cols-2 gap-4">
+                            <div class="grid grid-cols-3 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
-                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                    <input type="url" name="image_url" value="${content.image_url || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
-                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
                                 </div>
+                                ${buildImageWidthDropdown(content.image_width)}
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Introduction</label>
+                                ${buildFormattingToolbar('intro')}
                                 <textarea name="intro" rows="2" class="w-full border rounded-lg px-3 py-2"
                                           placeholder="Brief intro to the topic...">${content.intro || ''}</textarea>
                             </div>
@@ -656,14 +733,20 @@
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Key Principle (italic)</label>
-                                <input type="text" name="key_principle" value="${content.key_principle || ''}" 
+                                <input type="text" name="key_principle" value="${content.key_principle || ''}"
                                        class="w-full border rounded-lg px-3 py-2" placeholder="Key takeaway statement...">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Read More URL (email version only)</label>
+                                <input type="url" name="read_more_url" value="${content.read_more_url || ''}"
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="https://... (link to full content)">
+                                <p class="text-xs text-gray-400 mt-1">If set, email version shows "Read More" link to full content</p>
                             </div>
                             ${buildBgColorDropdown(content.bg_color_override || '')}
                         </div>
                     `;
                     break;
-                    
+
                 case 'event':
                     // Support for multiple events
                     const events = content.events || [];
@@ -714,19 +797,20 @@
                                 <input type="text" name="headline" value="${content.headline || ''}" 
                                        class="w-full border rounded-lg px-3 py-2" placeholder="SEE US AT">
                             </div>
-                            <div class="grid grid-cols-2 gap-4">
+                            <div class="grid grid-cols-3 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
-                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                    <input type="url" name="image_url" value="${content.image_url || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
-                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
                                 </div>
+                                ${buildImageWidthDropdown(content.image_width)}
                             </div>
-                            
+
                             <div class="flex items-center justify-between">
                                 <label class="block text-sm font-medium text-gray-700">Events</label>
                                 <div class="flex items-center space-x-2">
@@ -753,7 +837,75 @@
                         </div>
                     `;
                     break;
-                    
+
+                case 'article':
+                    html = `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Article Title</label>
+                                <input type="text" name="title" value="${content.title || ''}"
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="Article headline...">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Summary</label>
+                                ${buildFormattingToolbar('summary')}
+                                <textarea name="summary" rows="2" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="Brief summary or key takeaway...">${content.summary || ''}</textarea>
+                            </div>
+                            <div class="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
+                                    <input type="url" name="image_url" value="${content.image_url || ''}"
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}"
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
+                                </div>
+                                ${buildImageWidthDropdown(content.image_width)}
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Full Content</label>
+                                ${buildFormattingToolbar('content')}
+                                <textarea name="content" rows="8" class="w-full border rounded-lg px-3 py-2"
+                                          placeholder="Full article content... (supports HTML: <b>bold</b>, <i>italic</i>, <br> for line breaks)">${content.content || ''}</textarea>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Source Name</label>
+                                    <input type="text" name="source_name" value="${content.source_name || ''}"
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Publication or source name">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Source URL</label>
+                                    <input type="url" name="source_url" value="${content.source_url || ''}"
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">CTA Button Text (optional)</label>
+                                    <input type="text" name="cta_text" value="${content.cta_text || ''}"
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="Read Full Article">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">CTA Button URL</label>
+                                    <input type="url" name="cta_url" value="${content.cta_url || ''}"
+                                           class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Read More URL (email version only)</label>
+                                <input type="url" name="read_more_url" value="${content.read_more_url || ''}"
+                                       class="w-full border rounded-lg px-3 py-2" placeholder="https://... (link to full content)">
+                                <p class="text-xs text-gray-400 mt-1">If set, email version shows "Read More" link</p>
+                            </div>
+                            ${buildBgColorDropdown(content.bg_color_override || '')}
+                        </div>
+                    `;
+                    break;
+
                 case 'wrapup':
                     html = `
                         <div class="space-y-4">
@@ -777,23 +929,24 @@
                                 <input type="text" name="signature" value="${content.signature || brandConfig.signature || ''}" 
                                        class="w-full border rounded-lg px-3 py-2" placeholder="—The Team">
                             </div>
-                            <div class="grid grid-cols-2 gap-4">
+                            <div class="grid grid-cols-3 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
-                                    <input type="url" name="image_url" value="${content.image_url || ''}" 
+                                    <input type="url" name="image_url" value="${content.image_url || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="https://...">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Image Alt Text</label>
-                                    <input type="text" name="image_alt" value="${content.image_alt || ''}" 
+                                    <input type="text" name="image_alt" value="${content.image_alt || ''}"
                                            class="w-full border rounded-lg px-3 py-2" placeholder="Describe the image">
                                 </div>
+                                ${buildImageWidthDropdown(content.image_width)}
                             </div>
                             ${buildBgColorDropdown(content.bg_color_override || '')}
                         </div>
                     `;
                     break;
-                    
+
                 case 'footer':
                     html = `
                         <div class="space-y-4">
@@ -1214,7 +1367,24 @@
                 console.error('Error:', error);
             }
         }
-        
+
+        // Move section up or down
+        async function moveSection(sectionId, direction) {
+            try {
+                const response = await fetch('/api/sections/reorder', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({section_id: sectionId, direction: direction})
+                });
+                const result = await response.json();
+                if (result.success) {
+                    location.reload();
+                }
+            } catch (error) {
+                console.error('Error reordering:', error);
+            }
+        }
+
         // Image upload
         async function uploadImage(input) {
             const file = input.files[0];
@@ -1375,6 +1545,7 @@
             'details': 'Details Matter',
             'howto': 'How-To',
             'event': 'Event',
+            'article': 'Article',
             'wrapup': 'Wrap Up'
         };
         
@@ -1583,8 +1754,33 @@
                         <input type="text" id="ai-field-cta" value="${escapeHtml(content.cta_text || '')}" class="w-full border rounded-lg px-3 py-2">
                     </div>
                 `;
+            } else if (sectionType === 'article') {
+                html = `
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                        <input type="text" id="ai-field-title" value="${escapeHtml(content.title || '')}" class="w-full border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Summary</label>
+                        <textarea id="ai-field-summary" rows="2" class="w-full border rounded-lg px-3 py-2">${escapeHtml(content.summary || '')}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                        <textarea id="ai-field-content" rows="6" class="w-full border rounded-lg px-3 py-2">${escapeHtml(content.content || '')}</textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Source Name</label>
+                            <input type="text" id="ai-field-source-name" value="${escapeHtml(content.source_name || '')}" class="w-full border rounded-lg px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Source URL</label>
+                            <input type="url" id="ai-field-source-url" value="${escapeHtml(content.source_url || '')}" class="w-full border rounded-lg px-3 py-2">
+                        </div>
+                    </div>
+                `;
             }
-            
+
             container.innerHTML = html;
         }
         
@@ -1783,8 +1979,10 @@
                 applyEventContent(editor);
             } else if (aiCurrentSectionType === 'wrapup') {
                 applyWrapupContent(editor);
+            } else if (aiCurrentSectionType === 'article') {
+                applyArticleContent(editor);
             }
-            
+
             showToast('Content applied to section! Remember to save.');
             closeAIModal();
         }
@@ -1938,12 +2136,51 @@
             if (previewField) previewField.value = preview;
             if (ctaField) ctaField.value = cta;
         }
-        
+
+        function applyArticleContent(editor) {
+            const title = document.getElementById('ai-field-title')?.value || '';
+            const summary = document.getElementById('ai-field-summary')?.value || '';
+            const content = document.getElementById('ai-field-content')?.value || '';
+            const sourceName = document.getElementById('ai-field-source-name')?.value || '';
+            const sourceUrl = document.getElementById('ai-field-source-url')?.value || '';
+
+            const titleField = editor.querySelector('[name="title"]');
+            const summaryField = editor.querySelector('[name="summary"]');
+            const contentField = editor.querySelector('[name="content"]');
+            const sourceNameField = editor.querySelector('[name="source_name"]');
+            const sourceUrlField = editor.querySelector('[name="source_url"]');
+
+            if (titleField) titleField.value = title;
+            if (summaryField) summaryField.value = summary;
+            if (contentField) contentField.value = content;
+            if (sourceNameField) sourceNameField.value = sourceName;
+            if (sourceUrlField) sourceUrlField.value = sourceUrl;
+        }
+
         function regenerateAI() {
             resetAIModal();
             generateAIContent();
         }
         
+        // Insert HTML formatting tags into a textarea
+        function insertFormatting(fieldName, tag) {
+            const field = document.querySelector(`[name="${fieldName}"]`);
+            if (!field) return;
+            const start = field.selectionStart;
+            const end = field.selectionEnd;
+            const text = field.value;
+            const selected = text.substring(start, end);
+            let replacement;
+            if (tag === 'p') {
+                replacement = selected + '<br><br>';
+            } else {
+                replacement = `<${tag}>${selected}</${tag}>`;
+            }
+            field.value = text.substring(0, start) + replacement + text.substring(end);
+            field.focus();
+            field.setSelectionRange(start + replacement.length, start + replacement.length);
+        }
+
         // Toast notification
         function showToast(message) {
             const toast = document.createElement('div');

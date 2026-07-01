@@ -459,6 +459,7 @@ SECTION_TYPES = [
     {"type": "details", "name": "Details Matter", "description": "Technical deep-dive", "required": False},
     {"type": "howto", "name": "How-To", "description": "Practical guidance section", "required": False},
     {"type": "event", "name": "See Us / Events", "description": "Event announcements", "required": False},
+    {"type": "article", "name": "Article", "description": "Article or reference with link", "required": False},
     {"type": "wrapup", "name": "Wrap Up", "description": "Closing and next month preview", "required": False},
     {"type": "footer", "name": "Footer", "description": "Links and unsubscribe", "required": True}
 ]
@@ -943,6 +944,57 @@ async def toggle_section(section_id: int, request: Request, user: dict = Depends
     
     return JSONResponse({"success": True, "enabled": bool(result['enabled'])})
 
+@app.post("/api/sections/reorder")
+async def reorder_sections(request: Request, user: dict = Depends(get_current_user)):
+    """Reorder sections by swapping two section positions"""
+    data = await request.json()
+    section_id = data.get('section_id')
+    direction = data.get('direction')  # 'up' or 'down'
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Get the current section
+    cursor.execute("SELECT id, newsletter_id, section_order, section_type FROM sections WHERE id = ?", (section_id,))
+    current = cursor.fetchone()
+    if not current:
+        conn.close()
+        return JSONResponse({"success": False, "error": "Section not found"})
+
+    current = dict(current)
+    newsletter_id = current['newsletter_id']
+    current_order = current['section_order']
+
+    # Find the adjacent section
+    if direction == 'up':
+        cursor.execute("""
+            SELECT id, section_order FROM sections
+            WHERE newsletter_id = ? AND section_order < ?
+            ORDER BY section_order DESC LIMIT 1
+        """, (newsletter_id, current_order))
+    else:
+        cursor.execute("""
+            SELECT id, section_order FROM sections
+            WHERE newsletter_id = ? AND section_order > ?
+            ORDER BY section_order ASC LIMIT 1
+        """, (newsletter_id, current_order))
+
+    adjacent = cursor.fetchone()
+    if not adjacent:
+        conn.close()
+        return JSONResponse({"success": False, "error": "Cannot move further"})
+
+    adjacent = dict(adjacent)
+
+    # Swap the section_order values
+    cursor.execute("UPDATE sections SET section_order = ? WHERE id = ?", (adjacent['section_order'], current['id']))
+    cursor.execute("UPDATE sections SET section_order = ? WHERE id = ?", (current_order, adjacent['id']))
+
+    conn.commit()
+    conn.close()
+
+    return JSONResponse({"success": True})
+
 @app.post("/api/images/upload")
 async def upload_image(
     request: Request,
@@ -1022,25 +1074,31 @@ async def export_newsletter(newsletter_id: int, request: Request, user: dict = D
     
     # Handle single file download
     if version == 'email':
-        html_content = generate_newsletter_html(newsletter, sections, brand_config, 'email')
+        try:
+            html_content = generate_newsletter_html(newsletter, sections, brand_config, 'email')
+        except Exception as e:
+            return JSONResponse({"success": False, "error": f"Error generating HTML: {str(e)}"}, status_code=500)
         filename = f"{base_filename}_email.html"
-        
+
         return Response(
             content=html_content,
             media_type="text/html",
             headers={"Content-Disposition": f"attachment; filename=\"{filename}\""}
         )
-    
+
     elif version == 'website':
-        html_content = generate_newsletter_html(newsletter, sections, brand_config, 'website')
+        try:
+            html_content = generate_newsletter_html(newsletter, sections, brand_config, 'website')
+        except Exception as e:
+            return JSONResponse({"success": False, "error": f"Error generating HTML: {str(e)}"}, status_code=500)
         filename = f"{base_filename}_website.html"
-        
+
         return Response(
             content=html_content,
             media_type="text/html",
             headers={"Content-Disposition": f"attachment; filename=\"{filename}\""}
         )
-    
+
     else:  # version == 'both'
         # For 'both', return info that frontend needs to make two requests
         return JSONResponse({
@@ -1081,12 +1139,15 @@ async def export_newsletter_email(newsletter_id: int, user: dict = Depends(get_c
     conn.close()
     
     brand_config = json.loads(newsletter['brand_config'])
-    
-    html_content = generate_newsletter_html(newsletter, sections, brand_config, 'email')
-    
+
+    try:
+        html_content = generate_newsletter_html(newsletter, sections, brand_config, 'email')
+    except Exception as e:
+        return JSONResponse({"success": False, "error": f"Error generating HTML: {str(e)}"}, status_code=500)
+
     safe_title = "".join(c for c in newsletter['title'] if c.isalnum() or c in (' ', '-', '_')).strip()
     filename = f"{newsletter['brand_slug']}_{newsletter['month']}_{newsletter['year']}_{safe_title}_email.html"
-    
+
     return Response(
         content=html_content,
         media_type="text/html",
@@ -1124,12 +1185,15 @@ async def export_newsletter_website(newsletter_id: int, user: dict = Depends(get
     conn.close()
     
     brand_config = json.loads(newsletter['brand_config'])
-    
-    html_content = generate_newsletter_html(newsletter, sections, brand_config, 'website')
-    
+
+    try:
+        html_content = generate_newsletter_html(newsletter, sections, brand_config, 'website')
+    except Exception as e:
+        return JSONResponse({"success": False, "error": f"Error generating HTML: {str(e)}"}, status_code=500)
+
     safe_title = "".join(c for c in newsletter['title'] if c.isalnum() or c in (' ', '-', '_')).strip()
     filename = f"{newsletter['brand_slug']}_{newsletter['month']}_{newsletter['year']}_{safe_title}_website.html"
-    
+
     return Response(
         content=html_content,
         media_type="text/html",
@@ -1697,6 +1761,24 @@ Return a JSON object with this exact structure (no markdown, just valid JSON):
 
 Keep it informative but inviting. Return ONLY the JSON object."""
 
+    elif section_type == 'article':
+        return f"""{context}
+{guidance_text}
+
+Write content for an ARTICLE section. This references or summarizes an article, blog post, or news item relevant to tactical operators.
+
+Return a JSON object with this exact structure (no markdown, just valid JSON):
+
+{{
+    "title": "Article headline or reference title",
+    "summary": "1-2 sentence summary of the article or key takeaway.",
+    "content": "2-3 paragraphs covering the article's key points, relevance to operators, and practical implications.",
+    "source_name": "Name of the publication or source",
+    "source_url": "URL to the original article"
+}}
+
+Keep it informative and relevant. Return ONLY the JSON object."""
+
     elif section_type == 'wrapup':
         return f"""{context}
 {guidance_text}
@@ -1833,12 +1915,13 @@ def get_default_section_content(section_type: str) -> dict:
     defaults = {
         "header": {"logo_url": ""},
         "title": {"newsletter_name": "", "month": "", "year": ""},
-        "opening": {"hook": "", "overview": "", "image_url": "", "image_alt": ""},
+        "opening": {"hook": "", "overview": "", "image_url": "", "image_alt": "", "image_width": "100", "cta_text": "", "cta_url": "", "read_more_url": ""},
         "feature": {
             "title": "",
             "tagline": "",
             "image_url": "",
             "image_alt": "",
+            "image_width": "100",
             "problem": "",
             "solution": "",
             "features": [],
@@ -1851,13 +1934,15 @@ def get_default_section_content(section_type: str) -> dict:
             ],
             # Keep legacy fields for backward compatibility
             "cta_text": "",
-            "cta_url": ""
+            "cta_url": "",
+            "read_more_url": ""
         },
         "new_product": {
             "title": "",
             "tagline": "",
             "image_url": "",
             "image_alt": "",
+            "image_width": "100",
             "problem": "",
             "solution": "",
             "features": [],
@@ -1869,28 +1954,34 @@ def get_default_section_content(section_type: str) -> dict:
             ],
             # Keep legacy fields for backward compatibility
             "cta_text": "",
-            "cta_url": ""
+            "cta_url": "",
+            "read_more_url": ""
         },
         "details": {
             "title": "",
             "subtitle": "",
             "image_url": "",
             "image_alt": "",
+            "image_width": "100",
             "content": "",
-            "closing": ""
+            "closing": "",
+            "read_more_url": ""
         },
         "howto": {
             "title": "",
             "image_url": "",
             "image_alt": "",
+            "image_width": "100",
             "intro": "",
             "subsections": [],
-            "key_principle": ""
+            "key_principle": "",
+            "read_more_url": ""
         },
         "event": {
             "headline": "",
             "image_url": "",
             "image_alt": "",
+            "image_width": "100",
             "event_count": 1,
             "events": [
                 {
@@ -1902,13 +1993,27 @@ def get_default_section_content(section_type: str) -> dict:
             ],
             "closing": ""
         },
+        "article": {
+            "title": "",
+            "summary": "",
+            "image_url": "",
+            "image_alt": "",
+            "image_width": "100",
+            "content": "",
+            "source_name": "",
+            "source_url": "",
+            "cta_text": "",
+            "cta_url": "",
+            "read_more_url": ""
+        },
         "wrapup": {
             "title": "",
             "next_month_preview": "",
             "cta_text": "",
             "signature": "",
             "image_url": "",
-            "image_alt": ""
+            "image_alt": "",
+            "image_width": "100"
         },
         "footer": {
             "tagline": "",
@@ -2017,14 +2122,17 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
         return default_color
     
     # Helper to render optional image block
-    def get_image_html(image_url: str = '', image_alt: str = '', padding: str = '0 0 20px 0') -> str:
+    def get_image_html(image_url: str = '', image_alt: str = '', padding: str = '0 0 20px 0', width: str = '100') -> str:
         if not image_url:
             return ""
+        width_val = int(width) if width else 100
+        img_style = f"display: block; height: auto; border-radius: 4px; width: {width_val}%; max-width: {width_val}%;"
+        align = "center" if width_val < 100 else "left"
         return f"""
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                                 <tr>
-                                    <td style="padding: {padding};">
-                                        <img src="{image_url}" alt="{image_alt}" width="100%" style="display: block; width: 100%; height: auto; border-radius: 4px;">
+                                    <td style="padding: {padding};" align="{align}">
+                                        <img src="{image_url}" alt="{image_alt}" style="{img_style}">
                                     </td>
                                 </tr>
                             </table>
@@ -2073,18 +2181,53 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
         if not hook and not overview:
             return ""
         bg_color = get_bg_color('#ffffff')
-        image_html = get_image_html(content.get('image_url', ''), content.get('image_alt', ''), '20px 0 0 0')
+        image_width = content.get('image_width', '100')
+        image_html = get_image_html(content.get('image_url', ''), content.get('image_alt', ''), '0 0 20px 0', image_width)
+
+        cta_text = content.get('cta_text', '')
+        cta_url = content.get('cta_url', '#')
+        cta_html = ""
+        if cta_text:
+            cta_html = f"""
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                            <tr>
+                                <td align="center" style="padding-top: 20px;">
+                                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                        <tr>
+                                            <td style="background-color: {colors['accent']}; border-radius: 4px;">
+                                                <a href="{cta_url}" style="display: inline-block; padding: 14px 28px; font-size: 16px; font-weight: bold; color: {colors['primary']}; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">
+                                                    {cta_text}
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+            """
+
+        read_more_html = ""
+        read_more_url = content.get('read_more_url', '')
+        if read_more_url and version == 'email':
+            read_more_html = f"""
+                        <p style="margin: 15px 0 0 0; text-align: center;">
+                            <a href="{read_more_url}" style="color: {colors['primary']}; font-size: 14px; font-weight: 600; text-decoration: none;">Read More &rarr;</a>
+                        </p>
+            """
+
         return f"""
                     <!-- OPENING HOOK -->
                     <tr>
                         <td style="background-color: {bg_color}; padding: 30px 40px 20px 40px;">
+                            {image_html}
                             <p style="margin: 0 0 20px 0; font-size: 18px; line-height: 1.6; color: {colors['body_text']}; font-weight: 600;">
                                 {hook}
                             </p>
                             <p style="margin: 0; font-size: 16px; line-height: 1.6; color: {colors['body_text']};">
                                 {overview}
                             </p>
-                            {image_html}
+                            {cta_html}
+                            {read_more_html}
                         </td>
                     </tr>
         """
@@ -2105,13 +2248,24 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
         if not title:
             return ""
         bg_color = get_bg_color(colors['detail_bg'])
-        image_html = get_image_html(content.get('image_url', ''), content.get('image_alt', ''))
+        image_width = content.get('image_width', '100')
+        image_html = get_image_html(content.get('image_url', ''), content.get('image_alt', ''), '0 0 20px 0', image_width)
+
+        read_more_html = ""
+        read_more_url = content.get('read_more_url', '')
+        if read_more_url and version == 'email':
+            read_more_html = f"""
+                        <p style="margin: 15px 0 0 0; text-align: center;">
+                            <a href="{read_more_url}" style="color: {colors['primary']}; font-size: 14px; font-weight: 600; text-decoration: none;">Read More &rarr;</a>
+                        </p>
+            """
+
         return f"""
                     <!-- DETAILS MATTER -->
                     <tr>
                         <td style="background-color: {bg_color}; padding: 30px 40px;">
                             <h2 style="margin: 0 0 15px 0; font-size: 20px; font-weight: bold; color: {colors['primary']}; text-transform: uppercase; text-align: center;">
-                                Details Matter: {title}
+                                {title}
                             </h2>
                             <p style="margin: 0 0 15px 0; font-size: 18px; line-height: 1.5; color: {colors['primary']}; font-weight: 600; text-align: center;">
                                 {subtitle}
@@ -2123,6 +2277,7 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                             <p style="margin: 0; font-size: 16px; line-height: 1.6; color: {colors['body_text']}; font-style: italic;">
                                 {closing}
                             </p>
+                            {read_more_html}
                         </td>
                     </tr>
         """
@@ -2134,7 +2289,7 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
         key_principle = content.get('key_principle', '')
         if not title:
             return ""
-        
+
         subsections_html = ""
         for sub in subsections:
             items_html = "".join([f"<li>{item}</li>" for item in sub.get('items', [])])
@@ -2146,15 +2301,26 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                                 {items_html}
                             </ul>
             """
-        
+
         bg_color = get_bg_color(colors['secondary_bg'])
-        image_html = get_image_html(content.get('image_url', ''), content.get('image_alt', ''))
+        image_width = content.get('image_width', '100')
+        image_html = get_image_html(content.get('image_url', ''), content.get('image_alt', ''), '0 0 20px 0', image_width)
+
+        read_more_html = ""
+        read_more_url = content.get('read_more_url', '')
+        if read_more_url and version == 'email':
+            read_more_html = f"""
+                        <p style="margin: 15px 0 0 0; text-align: center;">
+                            <a href="{read_more_url}" style="color: {colors['primary']}; font-size: 14px; font-weight: 600; text-decoration: none;">Read More &rarr;</a>
+                        </p>
+            """
+
         return f"""
                     <!-- HOW-TO SECTION -->
                     <tr>
                         <td style="background-color: {bg_color}; padding: 30px 40px;">
                             <h2 style="margin: 0 0 15px 0; font-size: 20px; font-weight: bold; color: {colors['primary']}; text-transform: uppercase;">
-                                How-To: {title}
+                                {title}
                             </h2>
                             {image_html}
                             <p style="margin: 0 0 15px 0; font-size: 16px; line-height: 1.6; color: {colors['body_text']};">
@@ -2164,6 +2330,7 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                             <p style="margin: 20px 0 0 0; font-size: 16px; line-height: 1.6; color: {colors['body_text']}; font-weight: 600; font-style: italic;">
                                 {key_principle}
                             </p>
+                            {read_more_html}
                         </td>
                     </tr>
         """
@@ -2234,6 +2401,7 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                             </p>
             """
         
+        event_image_width = content.get('image_width', '100')
         return f"""
                     <!-- EVENT ANNOUNCEMENT -->
                     <tr>
@@ -2241,20 +2409,21 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                             <h2 style="margin: 0 0 15px 0; font-size: 24px; font-weight: bold; color: {colors['primary']}; text-transform: uppercase; text-align: center;">
                                 {headline}
                             </h2>
-                            {get_image_html(content.get('image_url', ''), content.get('image_alt', ''))}
+                            {get_image_html(content.get('image_url', ''), content.get('image_alt', ''), '0 0 20px 0', event_image_width)}
                             {events_html}
                             {closing_html}
                         </td>
                     </tr>
         """
-    
+
     elif section_type == "wrapup":
         title = content.get('title', '')
         preview = content.get('next_month_preview', '')
         cta = content.get('cta_text', 'Questions about anything we covered? Hit reply. We read every message.')
         signature = content.get('signature') or brand_config.get('signature', '')
         bg_color = get_bg_color('#ffffff')
-        image_html = get_image_html(content.get('image_url', ''), content.get('image_alt', ''))
+        wrapup_image_width = content.get('image_width', '100')
+        image_html = get_image_html(content.get('image_url', ''), content.get('image_alt', ''), '0 0 20px 0', wrapup_image_width)
         return f"""
                     <!-- CLOSING SECTION -->
                     <tr>
@@ -2275,7 +2444,85 @@ def render_section(section_type: str, content: dict, brand_config: dict, version
                         </td>
                     </tr>
         """
-    
+
+    elif section_type == "article":
+        title = content.get('title', '')
+        summary = content.get('summary', '')
+        body = content.get('content', '')
+        source_name = content.get('source_name', '')
+        source_url = content.get('source_url', '')
+        cta_text = content.get('cta_text', '')
+        cta_url = content.get('cta_url', '#')
+        if not title:
+            return ""
+        bg_color = get_bg_color('#ffffff')
+        image_width = content.get('image_width', '100')
+        image_html = get_image_html(content.get('image_url', ''), content.get('image_alt', ''), '0 0 20px 0', image_width)
+
+        source_html = ""
+        if source_name and source_url:
+            source_html = f"""
+                        <p style="margin: 15px 0 0 0; font-size: 14px; color: {colors['specs_text']};">
+                            Source: <a href="{source_url}" style="color: {colors['primary']}; text-decoration: underline;">{source_name}</a>
+                        </p>
+            """
+        elif source_name:
+            source_html = f"""
+                        <p style="margin: 15px 0 0 0; font-size: 14px; color: {colors['specs_text']}; font-style: italic;">
+                            Source: {source_name}
+                        </p>
+            """
+
+        cta_html = ""
+        if cta_text:
+            cta_html = f"""
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                            <tr>
+                                <td align="center" style="padding-top: 25px;">
+                                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                        <tr>
+                                            <td style="background-color: {colors['accent']}; border-radius: 4px;">
+                                                <a href="{cta_url}" style="display: inline-block; padding: 14px 28px; font-size: 16px; font-weight: bold; color: {colors['primary']}; text-decoration: none; text-transform: uppercase; letter-spacing: 0.5px;">
+                                                    {cta_text}
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+            """
+
+        read_more_html = ""
+        read_more_url = content.get('read_more_url', '')
+        if read_more_url and version == 'email':
+            read_more_html = f"""
+                        <p style="margin: 15px 0 0 0; text-align: center;">
+                            <a href="{read_more_url}" style="color: {colors['primary']}; font-size: 14px; font-weight: 600; text-decoration: none;">Read More &rarr;</a>
+                        </p>
+            """
+
+        return f"""
+                    <!-- ARTICLE SECTION -->
+                    <tr>
+                        <td style="background-color: {bg_color}; padding: 30px 40px;">
+                            {image_html}
+                            <h2 style="margin: 0 0 15px 0; font-size: 22px; font-weight: bold; color: {colors['primary']};">
+                                {title}
+                            </h2>
+                            <p style="margin: 0 0 15px 0; font-size: 16px; line-height: 1.6; color: {colors['body_text']}; font-weight: 600;">
+                                {summary}
+                            </p>
+                            <p style="margin: 0; font-size: 16px; line-height: 1.6; color: {colors['body_text']};">
+                                {body}
+                            </p>
+                            {source_html}
+                            {cta_html}
+                            {read_more_html}
+                        </td>
+                    </tr>
+        """
+
     elif section_type == "footer":
         tagline = content.get('tagline') or brand_config.get('tagline', '')
         website = content.get('website_url') or brand_config.get('website_url', '#')
@@ -2356,14 +2603,18 @@ def render_product_section(content: dict, brand_config: dict, version: str, bg_c
         """
     
     # Image HTML
+    image_width = content.get('image_width', '100')
     image_html = ""
     if image_url:
+        width_val = int(image_width) if image_width else 100
+        img_style = f"display: block; height: auto; border-radius: 4px; width: {width_val}%; max-width: {width_val}%;"
+        align = "center" if width_val < 100 else "left"
         image_html = f"""
                             <!-- FULL WIDTH IMAGE -->
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                                 <tr>
-                                    <td style="padding: 0 0 20px 0;">
-                                        <img src="{image_url}" alt="{image_alt}" width="100%" style="display: block; width: 100%; height: auto; border-radius: 4px;">
+                                    <td style="padding: 0 0 20px 0;" align="{align}">
+                                        <img src="{image_url}" alt="{image_alt}" style="{img_style}">
                                     </td>
                                 </tr>
                             </table>
@@ -2454,6 +2705,15 @@ def render_product_section(content: dict, brand_config: dict, version: str, bg_c
                             </table>
             """
     
+    read_more_html = ""
+    read_more_url = content.get('read_more_url', '')
+    if read_more_url and version == 'email':
+        read_more_html = f"""
+                        <p style="margin: 15px 0 0 0; text-align: center;">
+                            <a href="{read_more_url}" style="color: {colors['primary']}; font-size: 14px; font-weight: 600; text-decoration: none;">Read More &rarr;</a>
+                        </p>
+        """
+
     return f"""
                     <!-- PRODUCT SECTION -->
                     <tr>
@@ -2462,9 +2722,9 @@ def render_product_section(content: dict, brand_config: dict, version: str, bg_c
                             <p style="margin: 0 0 20px 0; font-size: 18px; line-height: 1.5; color: {colors['primary']}; font-weight: 600;">
                                 {tagline}
                             </p>
-                            
+
                             {image_html}
-                            
+
                             <!-- TWO COLUMN TEXT - Balanced Layout -->
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
                                 <tr>
@@ -2481,16 +2741,17 @@ def render_product_section(content: dict, brand_config: dict, version: str, bg_c
                                     </td>
                                 </tr>
                             </table>
-                            
+
                             {viewport_html}
-                            
+
                             <p style="margin: 20px 0 15px 0; font-size: 16px; line-height: 1.6; color: {colors['body_text']}; font-weight: 600;">
                                 Why it matters: {why}
                             </p>
-                            
+
                             <p style="margin: 0 0 15px 0; font-size: 14px; line-height: 1.6; color: {colors["specs_text"]}; font-style: italic;">{specs}</p>
-                            
+
                             {cta_buttons_html}
+                            {read_more_html}
                         </td>
                     </tr>
     """
@@ -2838,36 +3099,6 @@ async def test_page():
         <p>If you can see this, the FastAPI app is running correctly.</p>
         <p><a href="/login">Go to Login Page</a></p>
         <p><a href="/simple">Go to Simple Page</a></p>
-    </body>
-    </html>
-    """)
-
-@app.get("/test")
-async def test_page():
-    """Simple test page to verify app is working"""
-    return HTMLResponse("""
-    <!DOCTYPE html>
-    <html>
-    <head><title>Test</title></head>
-    <body style="font-family: Arial; padding: 40px;">
-        <h1>✅ App is Working!</h1>
-        <p>If you can see this, the FastAPI app is running correctly.</p>
-        <p><a href="/login">Go to Login Page</a></p>
-        <p><a href="/?skip_auth=1">Go to Home (Skip Auth)</a></p>
-    </body>
-    </html>
-    """)
-
-@app.get("/simple")
-async def simple_page():
-    """Ultra-simple page with no dependencies"""
-    return HTMLResponse("""
-    <!DOCTYPE html>
-    <html>
-    <head><title>Simple Test</title></head>
-    <body style="font-family: Arial; padding: 40px;">
-        <h1>Simple Page Works!</h1>
-        <p>No database, no sessions, no dependencies.</p>
     </body>
     </html>
     """)
