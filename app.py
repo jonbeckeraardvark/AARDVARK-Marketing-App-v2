@@ -1590,9 +1590,9 @@ async def generate_with_claude(prompt: str, system_prompt: str = "") -> str:
     """Call Claude API to generate content"""
     if not ANTHROPIC_API_KEY:
         return "[ERROR: ANTHROPIC_API_KEY not set. Set it as an environment variable.]"
-    
+
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=30.0)) as client:
             response = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
@@ -1613,9 +1613,19 @@ async def generate_with_claude(prompt: str, system_prompt: str = "") -> str:
             result = response.json()
             return result['content'][0]['text']
     except httpx.HTTPStatusError as e:
+        print(f"Claude API HTTP error: {e.response.status_code} - {e.response.text}")
         return f"[API Error: {e.response.status_code} - {e.response.text}]"
+    except httpx.TimeoutException as e:
+        print(f"Claude API timeout: {type(e).__name__}: {e}")
+        return "[API Error: Request timed out. The AI service took too long to respond. Please try again.]"
+    except httpx.ConnectError as e:
+        print(f"Claude API connection error: {type(e).__name__}: {e}")
+        return f"[API Error: Could not connect to AI service - {type(e).__name__}: {e}]"
     except Exception as e:
-        return f"[Error calling Claude API: {str(e)}]"
+        import traceback
+        print(f"Claude API unexpected error: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        return f"[Error calling Claude API: {type(e).__name__}: {e}]"
 
 
 def get_brand_writing_system_prompt(brand_config: dict, section_type: str) -> str:
